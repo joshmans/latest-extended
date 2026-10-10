@@ -14,6 +14,9 @@ protocol AppProviding {
 	/// Returns a list of apps with available updates that can be updated from within Latest.
 	var updatableApps: [App] { get }
 
+	/// Whether any non-ignored Mac App Store app has an update available. Those cannot be updated by Latest, but the App Store can be opened on its updates page.
+	var hasAppStoreUpdates: Bool { get }
+
 	/// Returns the number of apps with updates available.
 	func countOfAvailableUpdates(where condition: (App) -> Bool) -> Int
 	
@@ -88,6 +91,12 @@ class AppDataStore: AppProviding {
 		}
 	}
 		
+	var hasAppStoreUpdates: Bool {
+		updateQueue.sync {
+			self.apps.contains { $0.updateAvailable && $0.source == .appStore && !$0.isIgnored }
+		}
+	}
+	
 	/// The cached count of apps with updates available
 	func countOfAvailableUpdates(where condition: (App) -> Bool) -> Int {
 		updateQueue.sync {

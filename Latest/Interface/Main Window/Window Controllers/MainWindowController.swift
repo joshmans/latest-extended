@@ -90,7 +90,7 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
         self.listViewController.checkForUpdates()
     }
     
-    /// Open all apps that have an update available. If apps from the Mac App Store are there as well, open the Mac App Store
+    /// Update all apps that can be updated from within Latest. If apps from the Mac App Store have updates as well, open the Mac App Store on its updates page.
     @IBAction func updateAll(_ sender: Any?) {
 		// Iterate all updatable apps and perform update
 		UpdateCheckCoordinator.shared.appProvider.updatableApps.forEach({ app in
@@ -98,7 +98,19 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
 				app.performUpdate()
 			}
 		})
+		
+		if UpdateCheckCoordinator.shared.appProvider.hasAppStoreUpdates {
+			Self.openAppStoreUpdates()
+		}
     }
+	
+	/// Opens the Mac App Store on its updates page, or just the App Store if that page cannot be opened.
+	static func openAppStoreUpdates() {
+		if !NSWorkspace.shared.open(AppStoreLinks.updatesPage),
+		   let appStore = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.AppStore") {
+			NSWorkspace.shared.openApplication(at: appStore, configuration: NSWorkspace.OpenConfiguration())
+		}
+	}
     	
 	@IBAction func performFindPanelAction(_ sender: Any?) {
 		self.window?.makeFirstResponder(self.listViewController.searchField)
@@ -217,7 +229,7 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
 	
 	/// Whether there are any updatable apps.
 	private var hasUpdatesAvailable: Bool {
-		!UpdateCheckCoordinator.shared.appProvider.updatableApps.isEmpty
+		!UpdateCheckCoordinator.shared.appProvider.updatableApps.isEmpty || UpdateCheckCoordinator.shared.appProvider.hasAppStoreUpdates
 	}
 
     
