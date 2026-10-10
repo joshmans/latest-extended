@@ -106,10 +106,20 @@ enum HomebrewPackageChecker {
 		return reverse
 	}
 	
+	/// Environment for removals. Without this, Homebrew silently removes other "unneeded" formulae too, which would remove things the user did not choose.
+	static let uninstallEnvironment = environment.merging(["HOMEBREW_NO_AUTOREMOVE": "1"]) { $1 }
+	
+	/// Whether the formula is currently installed.
+	static func isInstalled(_ name: String) -> Bool {
+		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return false }
+		return CommandRunner.run(brew, ["list", "--formula", "--versions", name], environment: environment).output
+			.split(separator: "\n").contains { $0.hasPrefix(name + " ") }
+	}
+	
 	/// Uninstalls a formula. Homebrew itself refuses if other formulae still depend on it, and this never passes `--force` or `--ignore-dependencies`.
 	static func uninstall(_ name: String) -> CommandRunner.Result {
 		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return .init(status: -1, output: "Homebrew is not installed.") }
-		return CommandRunner.run(brew, ["uninstall", "--formula", name], environment: environment)
+		return CommandRunner.run(brew, ["uninstall", "--formula", name], environment: uninstallEnvironment)
 	}
 	
 	static func refreshIndex() -> CommandRunner.Result {

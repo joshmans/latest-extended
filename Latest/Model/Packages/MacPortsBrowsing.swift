@@ -50,6 +50,14 @@ extension MacPortsParser {
 		return result
 	}
 	
+	/// Whether a prebuilt archive version (e.g. `2.9.7_0+ffmpeg`) is the version the local port index would install (`2.9.7`, revision `0`).
+	static func archiveMatchesIndex(archiveVersion: String, indexVersion: String, indexRevision: String) -> Bool {
+		let expected = "\(indexVersion)_\(indexRevision)"
+		guard archiveVersion.hasPrefix(expected) else { return false }
+		let rest = archiveVersion.dropFirst(expected.count)
+		return rest.isEmpty || rest.first == "+"
+	}
+	
 	/// Whether the string is a valid variant selection such as `+x11 -quartz`.
 	static func isValidVariantSelection(_ string: String) -> Bool {
 		string.trimmingCharacters(in: .whitespaces).isEmpty

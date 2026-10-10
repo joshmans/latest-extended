@@ -189,13 +189,19 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		
 		DispatchQueue.global().async {
 			let reverse = HomebrewPackageChecker.reverseDependencies()
-			var known = Dictionary(uniqueKeysWithValues: selected.compactMap { package in package.alternative.map { (package.name, Optional($0.name)) } })
+			var known = Dictionary(uniqueKeysWithValues: selected.compactMap { package in package.alternative.map { (package.name, Optional($0)) } })
 			let plan = PackageSwitch.plan(selected: selected, reverseDependencies: reverse) { formula in
-				if let cached = known[formula] { return cached }
-				let port = MacPortsPackageChecker.equivalent(forHomebrewFormula: formula)?.name
-				known[formula] = .some(port)
-				return port
+				if let cached = known[formula] { return cached?.name }
+				let alternative = MacPortsPackageChecker.equivalent(forHomebrewFormula: formula)
+				known[formula] = .some(alternative)
+				return alternative?.name
 			}
+			
+			// Prebuilt archives are published for the newest port versions. A stale local index asks for versions that no longer exist.
+			var archiveVersions = [String: String]()
+			for alternative in known.values.compactMap({ $0 }) { archiveVersions[alternative.name] = alternative.version }
+			let planned = Set(plan.groups.flatMap { $0.ports.values })
+			let outdatedIndex = MacPortsPackageChecker.portsWithOutdatedIndex(archiveVersions.filter { planned.contains($0.key) })
 			
 			DispatchQueue.main.async {
 				let blocked = plan.blocked.map { "• \($0.package) stays in Homebrew: \($0.reason)" }
@@ -213,6 +219,9 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 					text += "\n" + group.formulae.map { "• \($0) → port \(group.ports[$0] ?? "?")" + (group.pulledIn.contains($0) ? "  (depends on your selection)" : "") }.joined(separator: "\n") + "\n"
 				}
 				if !blocked.isEmpty { text += "\nKept in Homebrew:\n" + blocked.joined(separator: "\n") + "\n" }
+				if !outdatedIndex.isEmpty {
+					text += "\nYour MacPorts index is out of date for \(outdatedIndex.joined(separator: ", ")), so those prebuilt archives would not be found. The index will be refreshed first (port selfupdate), which asks for your administrator password.\n"
+				}
 				text += "\nMacPorts versions can be older than Homebrew's. Make sure /opt/local/bin is on your PATH before /usr/local/bin."
 				alert.informativeText = text
 				alert.addButton(withTitle: "Switch")
@@ -228,6 +237,10 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				DispatchQueue.global().async {
 					let ports = Array(Set(plan.groups.flatMap { $0.ports.values })).sorted()
 					var outputs = [String]()
+					if !outdatedIndex.isEmpty {
+						let update = MacPortsPackageChecker.selfUpdate()
+						outputs.append("port selfupdate: exit \(update.status)\n" + update.output.suffix(800))
+					}
 					let install = MacPortsPackageChecker.install(ports)
 					outputs.append("port -b install \(ports.joined(separator: " ")): exit \(install.status)\n" + install.output.suffix(1500))
 					
@@ -238,6 +251,10 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 							continue
 						}
 						for formula in group.formulae {
+							guard HomebrewPackageChecker.isInstalled(formula) else {
+								outputs.append("\(formula): already removed from Homebrew.")
+								continue
+							}
 							let removal = HomebrewPackageChecker.uninstall(formula)
 							outputs.append("brew uninstall \(formula): exit \(removal.status)\n" + removal.output.suffix(600))
 							if removal.status != 0 {

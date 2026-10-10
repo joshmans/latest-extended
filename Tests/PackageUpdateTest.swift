@@ -103,6 +103,17 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertEqual(urls, ["pipx-1.17.2_0+python314.darwin_25.x86_64.tbz2", "pipx-1.17.2_0+python314.darwin_any.noarch.tbz2"])
 	}
 	
+	func testDetectsStaleIndexAgainstArchives() {
+		XCTAssertFalse(MacPortsParser.archiveMatchesIndex(archiveVersion: "2.9.7_0", indexVersion: "2.9.6", indexRevision: "0"))
+		XCTAssertTrue(MacPortsParser.archiveMatchesIndex(archiveVersion: "2026.08.19_0+ffmpeg+python314", indexVersion: "2026.08.19", indexRevision: "0"))
+		XCTAssertFalse(MacPortsParser.archiveMatchesIndex(archiveVersion: "1.2.10_0", indexVersion: "1.2.1", indexRevision: "0"), "A longer version must not match by prefix")
+		XCTAssertFalse(MacPortsParser.archiveMatchesIndex(archiveVersion: "1.25.0_1+gnutls", indexVersion: "1.25.0", indexRevision: "0"))
+	}
+	
+	func testUninstallNeverAutoremovesOtherFormulae() {
+		XCTAssertEqual(HomebrewPackageChecker.uninstallEnvironment["HOMEBREW_NO_AUTOREMOVE"], "1")
+	}
+	
 	func testShellQuoting() {
 		XCTAssertEqual(CommandRunner.shellQuote("it's"), "'it'\\''s'")
 	}
