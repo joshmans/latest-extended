@@ -67,7 +67,7 @@ struct AppListSnapshot {
 			}
 			
 			// Filter apps not using the builtin updater
-			if !AppListSettings.shared.includeAppsWithLimitedSupport && app.updateAvailable && !app.usesBuiltInUpdater {
+			if !AppListSettings.shared.includeAppsWithLimitedSupport && app.updateAvailable && !app.canStartUpdateFromList {
 				return false
 			}
 			

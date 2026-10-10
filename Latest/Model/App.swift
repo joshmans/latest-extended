@@ -152,6 +152,13 @@ extension App {
 		return self.update?.usesBuiltInUpdater ?? false
 	}
 	
+	/// Whether the update can be started from the app's list without enabling limited support apps.
+	///
+	/// App Store updates count: their button opens the App Store on the app's page, where the update is started.
+	var canStartUpdateFromList: Bool {
+		return self.usesBuiltInUpdater || self.source == .appStore
+	}
+	
 	/// The name of the external updater used to update this app.
 	///
 	/// Returns `nil` if `usesBuiltInUpdater` is `true`.

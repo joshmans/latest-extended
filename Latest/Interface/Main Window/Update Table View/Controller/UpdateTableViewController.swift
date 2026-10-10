@@ -472,7 +472,7 @@ class UpdateTableViewController: NSViewController, NSMenuItemValidation, NSTable
     /// Updates the title in the toolbar ("No / n updates available") and the badge of the app icon
     private func updateTitleAndBatch() {
 		let showExternalUpdates = AppListSettings.shared.includeAppsWithLimitedSupport
-		let count = UpdateCheckCoordinator.shared.appProvider.countOfAvailableUpdates(where: { showExternalUpdates || $0.usesBuiltInUpdater })
+		let count = UpdateCheckCoordinator.shared.appProvider.countOfAvailableUpdates(where: { showExternalUpdates || $0.canStartUpdateFromList })
 		let statusText: String
 		
 		// Update dock badge

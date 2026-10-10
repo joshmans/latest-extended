@@ -97,18 +97,10 @@ extension MacAppStoreUpdateCheckerOperation {
 	/// Returns a proper update object from the given app store entry.
 	private func update(from entry: AppStoreEntry) -> App.Update {
 		let version = Version(versionNumber: entry.versionNumber, buildNumber: nil)
-		let action: App.Update.Action = if Self.isIOSAppBundle(at: app.fileURL) {
-			// iOS Apps: Open App Store page where the user can update manually. The update operation does not work for them.
-			.external(label: NSLocalizedString("AppStoreSource", comment: "The source name of apps loaded from the App Store."), block: { app in
-				NSWorkspace.shared.open(entry.pageURL)
-			})
-		} else {
-			// Perform the update in-app
-			.builtIn(block: { app in
-				UpdateQueue.shared.addOperation(MacAppStoreUpdateOperation(bundleIdentifier: app.bundleIdentifier, appIdentifier: app.identifier, appStoreIdentifier: entry.appStoreIdentifier))
-			})
-
-		}
+		// Open the App Store on the app's page, where the update can be started. The in-app updater relies on private frameworks and fails on current macOS releases ("The installation could not be started"), so it is no longer used.
+		let action: App.Update.Action = .external(label: NSLocalizedString("AppStoreSource", comment: "The source name of apps loaded from the App Store."), block: { app in
+			NSWorkspace.shared.open(entry.pageURL)
+		})
 		
 		return App.Update(app: self.app, remoteVersion: version, minimumOSVersion: entry.minimumOSVersion, source: .appStore, date: entry.date, releaseNotes: entry.releaseNotes, updateAction: action)
 	}
