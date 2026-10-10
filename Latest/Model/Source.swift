@@ -75,10 +75,8 @@ extension App.Source {
 		switch self {
 		case .none:
 			return .none
-		case .sparkle, .appStore:
+		case .sparkle, .appStore, .homebrew:
 			return .full
-		case .homebrew:
-			return .limited
 		}
 	}
 }

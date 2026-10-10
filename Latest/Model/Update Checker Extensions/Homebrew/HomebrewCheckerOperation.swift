@@ -51,11 +51,11 @@ class HomebrewCheckerOperation: StatefulOperation, UpdateCheckerOperation, @unch
 			return
 		}
 		
-		repository.updateInfo(for: bundle) { bundle, version, minimumOSVersion in
+		repository.updateInfo(for: bundle) { bundle, version, minimumOSVersion, token in
 			defer { self.finish() }
-			guard let version else { return }
-			self.update = App.Update(app: bundle, remoteVersion: version, minimumOSVersion: minimumOSVersion, source: .homebrew, date: nil, releaseNotes: nil, updateAction: .external(label: bundle.name, block: { app in
-				app.open()
+			guard let version, let token else { return }
+			self.update = App.Update(app: bundle, remoteVersion: version, minimumOSVersion: minimumOSVersion, source: .homebrew, date: nil, releaseNotes: nil, updateAction: .builtIn(block: { app in
+				UpdateQueue.shared.addOperation(HomebrewUpdateOperation(bundleIdentifier: app.bundleIdentifier, appIdentifier: app.identifier, caskToken: token))
 			}))
 		}
 	}

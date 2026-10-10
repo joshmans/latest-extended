@@ -69,3 +69,5 @@ iOSInjectionProject/
 *.xcbkptlist
 /Frameworks/Cartfile.resolved
 Frameworks/Carthage/Checkouts
+dist/
+build/
