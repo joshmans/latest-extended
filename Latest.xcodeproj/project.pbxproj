@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */; };
+		C101B2C3D4E5F60718293A4B /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C201B2C3D4E5F60718293A4B /* CommandRunner.swift */; };
+		C102B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */; };
+		C103B2C3D4E5F60718293A4B /* MacPortsSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C203B2C3D4E5F60718293A4B /* MacPortsSupport.swift */; };
+		C104B2C3D4E5F60718293A4B /* PackagesWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C204B2C3D4E5F60718293A4B /* PackagesWindowController.swift */; };
 		50037513245EA9FA00D3BB0D /* UpdateGroupCellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50037512245EA9FA00D3BB0D /* UpdateGroupCellView.swift */; };
 		501EA9821EB1BA4400D05821 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 501EA9841EB1BA4400D05821 /* Localizable.strings */; };
 		501EA98A1EB1BD8B00D05821 /* Localizable.stringsdict in Resources */ = {isa = PBXBuildFile; fileRef = 501EA98C1EB1BD8B00D05821 /* Localizable.stringsdict */; };
@@ -68,6 +73,7 @@
 		50C59D692D1F182B005BC36B /* SettingsTabViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C59D682D1F182B005BC36B /* SettingsTabViewController.swift */; };
 		50C59D6D2D1F54BF005BC36B /* GeneralSettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C59D6C2D1F54B5005BC36B /* GeneralSettingsViewController.swift */; };
 		B1B2C3D4E5F60718293A4B5C /* UpdateRepositoryTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1B2C3D4E5F60718293A4B5D /* UpdateRepositoryTest.swift */; };
+		B2B2C3D4E5F60718293A4B5C /* PackageUpdateTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2B2C3D4E5F60718293A4B5D /* PackageUpdateTest.swift */; };
 		50C81D741FBADC9100324C2E /* VersionTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C81D731FBADC9100324C2E /* VersionTest.swift */; };
 		50C857402B25CF7500F5BF0B /* UpdateRepositoryCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C8573F2B25CF7500F5BF0B /* UpdateRepositoryCache.swift */; };
 		50C8C85C208A0EE9004FF5D5 /* dsa_pub.pem in Resources */ = {isa = PBXBuildFile; fileRef = 50C8C85B208A0EE9004FF5D5 /* dsa_pub.pem */; };
@@ -95,6 +101,11 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageUpdate.swift; sourceTree = "<group>"; };
+		C201B2C3D4E5F60718293A4B /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
+		C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewPackageChecker.swift; sourceTree = "<group>"; };
+		C203B2C3D4E5F60718293A4B /* MacPortsSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPortsSupport.swift; sourceTree = "<group>"; };
+		C204B2C3D4E5F60718293A4B /* PackagesWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackagesWindowController.swift; sourceTree = "<group>"; };
 		29A88F88296B7DC2000A5EDE /* fa */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fa; path = fa.lproj/Main.strings; sourceTree = "<group>"; };
 		29A88F89296B7DC2000A5EDE /* fa */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fa; path = fa.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		29A88F8A296B7DC2000A5EDE /* fa */ = {isa = PBXFileReference; lastKnownFileType = text.plist.stringsdict; name = fa; path = fa.lproj/Localizable.stringsdict; sourceTree = "<group>"; };
@@ -268,6 +279,7 @@
 		50C81D691FBADC5900324C2E /* Latest Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Latest Tests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		50C81D6D1FBADC5900324C2E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B1B2C3D4E5F60718293A4B5D /* UpdateRepositoryTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateRepositoryTest.swift; sourceTree = "<group>"; };
+		B2B2C3D4E5F60718293A4B5D /* PackageUpdateTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageUpdateTest.swift; sourceTree = "<group>"; };
 		50C81D731FBADC9100324C2E /* VersionTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VersionTest.swift; sourceTree = "<group>"; };
 		50C857312B23CD5200F5BF0B /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ro; path = ro.lproj/Main.strings; sourceTree = "<group>"; };
 		50C857322B23CD7D00F5BF0B /* ro */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ro; path = ro.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -360,6 +372,18 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C3000000000000000000AAAA /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */,
+				C201B2C3D4E5F60718293A4B /* CommandRunner.swift */,
+				C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */,
+				C203B2C3D4E5F60718293A4B /* MacPortsSupport.swift */,
+				C204B2C3D4E5F60718293A4B /* PackagesWindowController.swift */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
 		501EF8EB2B9A661B00F0D759 /* Directory */ = {
 			isa = PBXGroup;
 			children = (
@@ -577,6 +601,7 @@
 				50366E5127DFD14100D4E247 /* Source.swift */,
 				50E4EB052B17DAB900A70A7D /* Version */,
 				5039DE8322CA39630088B39B /* Updater */,
+				C3000000000000000000AAAA /* Packages */,
 				509512231FF36306003D2D7F /* Update Checker Extensions */,
 				50D6EF5D2814618C002D7006 /* Sparkle */,
 				507375552789AA7C00F371D8 /* Utilities */,
@@ -648,6 +673,7 @@
 				50C81D6D1FBADC5900324C2E /* Info.plist */,
 				50FEB87C2B1BE630006FB75D /* OSVersionTest.swift */,
 				B1B2C3D4E5F60718293A4B5D /* UpdateRepositoryTest.swift */,
+				B2B2C3D4E5F60718293A4B5D /* PackageUpdateTest.swift */,
 				50C81D731FBADC9100324C2E /* VersionTest.swift */,
 				50E4EB082B17DFCE00A70A7D /* VersionParserTest.swift */,
 				50FEB87E2B1BE67E006FB75D /* VersionSanitizationTest.swift */,
@@ -958,6 +984,11 @@
 				50E4EB072B17DACB00A70A7D /* VersionParser.swift in Sources */,
 				50290E751E53EB6A00133E3D /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* HomebrewUpdateOperation.swift in Sources */,
+				C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */,
+				C101B2C3D4E5F60718293A4B /* CommandRunner.swift in Sources */,
+				C102B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift in Sources */,
+				C103B2C3D4E5F60718293A4B /* MacPortsSupport.swift in Sources */,
+				C104B2C3D4E5F60718293A4B /* PackagesWindowController.swift in Sources */,
 				5039DE8D22CAA2790088B39B /* MacAppStoreUpdateOperation.swift in Sources */,
 				507375572789AB0300F371D8 /* AppListSnapshot.swift in Sources */,
 				501EF8ED2B9A665A00F0D759 /* BundleCollector.swift in Sources */,
@@ -1003,6 +1034,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B1B2C3D4E5F60718293A4B5C /* UpdateRepositoryTest.swift in Sources */,
+				B2B2C3D4E5F60718293A4B5C /* PackageUpdateTest.swift in Sources */,
 				50C81D741FBADC9100324C2E /* VersionTest.swift in Sources */,
 				50FEB87D2B1BE630006FB75D /* OSVersionTest.swift in Sources */,
 				50FEB87F2B1BE67F006FB75D /* VersionSanitizationTest.swift in Sources */,

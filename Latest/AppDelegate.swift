@@ -13,7 +13,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         // Insert code here to initialize your application
+		installPackagesMenuItem()
     }
+	
+	/// Adds the entry for the package updates window to the second menu (File).
+	private func installPackagesMenuItem() {
+		guard let menu = NSApp.mainMenu?.items.dropFirst().first?.submenu else { return }
+		let item = NSMenuItem(title: "Package Updates…", action: #selector(showPackageUpdates), keyEquivalent: "p")
+		item.keyEquivalentModifierMask = [.command, .shift]
+		item.target = self
+		menu.insertItem(item, at: 0)
+		menu.insertItem(.separator(), at: 1)
+	}
+	
+	@objc private func showPackageUpdates() {
+		PackagesWindowController.shared.show()
+	}
 
     func applicationWillTerminate(_ aNotification: Notification) {
         // Insert code here to tear down your application
