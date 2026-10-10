@@ -135,6 +135,29 @@ enum MacPortsPackageChecker {
 		return CommandRunner.runAsAdministrator(portPath, ["-N", "-b", "upgrade"] + valid)
 	}
 	
+	/// Installs ports. By default only prebuilt archives are used (`-b`); `buildFromSource` allows compiling.
+	static func install(_ names: [String], variants: String = "", buildFromSource: Bool = false) -> CommandRunner.Result {
+		let valid = names.filter(MacPortsParser.isValidPortName)
+		guard !valid.isEmpty, valid.count == names.count, MacPortsParser.isValidVariantSelection(variants) else {
+			return .init(status: -1, output: "Invalid port name or variants.")
+		}
+		let variantArguments = variants.split(separator: " ").map(String.init)
+		// -p continues with the remaining ports if one fails.
+		var arguments = ["-N", "-p"] + (buildFromSource ? [] : ["-b"]) + ["install"]
+		for name in valid { arguments.append(name); if valid.count == 1 { arguments += variantArguments } }
+		return CommandRunner.runAsAdministrator(portPath, arguments)
+	}
+	
+	static func uninstall(_ name: String) -> CommandRunner.Result {
+		guard MacPortsParser.isValidPortName(name) else { return .init(status: -1, output: "Invalid port name.") }
+		return CommandRunner.runAsAdministrator(portPath, ["-N", "uninstall", name])
+	}
+	
+	/// Whether the port is currently installed and active.
+	static func isActive(_ name: String) -> Bool {
+		MacPortsParser.parseInstalled(CommandRunner.run(portPath, ["installed", name]).output).contains { $0.name == name && $0.isActive }
+	}
+	
 	/// Refreshes the port index.
 	static func selfUpdate() -> CommandRunner.Result {
 		CommandRunner.runAsAdministrator(portPath, ["-N", "selfupdate"])

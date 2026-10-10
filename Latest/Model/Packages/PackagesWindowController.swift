@@ -18,6 +18,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	private lazy var refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refresh))
 	private lazy var indexButton = NSButton(title: "Update Package Indexes…", target: self, action: #selector(updateIndexes))
 	private lazy var updateButton = NSButton(title: "Update Selected", target: self, action: #selector(updateSelected))
+	private lazy var switchButton = NSButton(title: "Switch to MacPorts…", target: self, action: #selector(switchToMacPorts))
 	private var isBusy = false { didSet { refreshControls() } }
 	
 	private enum Column: String, CaseIterable {
@@ -73,7 +74,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		spinner.isDisplayedWhenStopped = false
 		statusLabel.lineBreakMode = .byTruncatingTail
 		
-		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), indexButton, refreshButton, updateButton])
+		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), indexButton, refreshButton, switchButton, updateButton])
 		buttons.orientation = .horizontal
 		
 		let stack = NSStackView(views: [buttons, tableScroll, logScroll])
@@ -100,6 +101,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		refreshButton.isEnabled = !isBusy
 		indexButton.isEnabled = !isBusy
 		updateButton.isEnabled = !isBusy && !selectedUpdatablePackages.isEmpty
+		switchButton.isEnabled = !isBusy && !selectedSwitchablePackages.isEmpty && MacPortsPackageChecker.isInstalled
 		isBusy ? spinner.startAnimation(nil) : spinner.stopAnimation(nil)
 	}
 	
@@ -172,6 +174,73 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	
 	private var selectedUpdatablePackages: [PackageUpdate] {
 		table.selectedRowIndexes.compactMap { $0 < packages.count ? packages[$0] : nil }.filter { $0.state.isPrebuilt }
+	}
+	
+	private var selectedSwitchablePackages: [PackageUpdate] {
+		table.selectedRowIndexes.compactMap { $0 < packages.count ? packages[$0] : nil }.filter { $0.manager == .homebrew && $0.alternative != nil }
+	}
+	
+	/// Replaces selected Homebrew formulae with their prebuilt MacPorts equivalents, keeping only the MacPorts copy.
+	@objc private func switchToMacPorts() {
+		let selected = selectedSwitchablePackages
+		guard !selected.isEmpty else { return }
+		isBusy = true
+		statusLabel.stringValue = "Checking what depends on the selected formulae…"
+		
+		DispatchQueue.global().async {
+			var dependents = [String: [String]]()
+			for package in selected { dependents[package.name] = HomebrewPackageChecker.dependents(of: package.name) }
+			let plan = PackageSwitch.plan(for: selected, dependents: dependents)
+			
+			DispatchQueue.main.async {
+				var kept = plan.keptBecauseOfDependents.map { "• \($0.package.name) stays in Homebrew: needed by \($0.dependents.joined(separator: ", "))" }
+				if plan.toSwitch.isEmpty {
+					kept.forEach(self.append)
+					self.statusLabel.stringValue = "Nothing can be switched: other Homebrew formulae depend on the selection."
+					self.isBusy = false
+					return
+				}
+				
+				let alert = NSAlert()
+				alert.messageText = "Switch \(plan.toSwitch.count) package(s) to MacPorts?"
+				alert.informativeText = "Each prebuilt MacPorts port is installed first. Only after it is confirmed installed is the Homebrew formula uninstalled.\n\n"
+					+ plan.toSwitch.map { "• \($0.name) → port \($0.alternative!.name) \($0.alternative!.version)" }.joined(separator: "\n")
+					+ (kept.isEmpty ? "" : "\n\nKept in Homebrew:\n" + kept.joined(separator: "\n"))
+					+ "\n\nMacPorts versions can be older than Homebrew's. Make sure /opt/local/bin is on your PATH before /usr/local/bin."
+				alert.addButton(withTitle: "Switch")
+				alert.addButton(withTitle: "Cancel")
+				guard alert.runModal() == .alertFirstButtonReturn else {
+					self.isBusy = false
+					self.statusLabel.stringValue = "Cancelled."
+					return
+				}
+				
+				self.statusLabel.stringValue = "Installing MacPorts equivalents…"
+				kept.forEach(self.append)
+				DispatchQueue.global().async {
+					let ports = plan.toSwitch.compactMap { $0.alternative?.name }
+					var outputs = [String]()
+					let install = MacPortsPackageChecker.install(ports)
+					outputs.append("port -b install \(ports.joined(separator: " ")): exit \(install.status)\n" + install.output.suffix(1500))
+					
+					for package in plan.toSwitch {
+						guard let port = package.alternative?.name else { continue }
+						if MacPortsPackageChecker.isActive(port) {
+							let removal = HomebrewPackageChecker.uninstall(package.name)
+							outputs.append("brew uninstall \(package.name): exit \(removal.status)\n" + removal.output.suffix(600))
+						} else {
+							outputs.append("\(package.name): MacPorts install of \(port) did not complete, Homebrew copy left in place.")
+						}
+					}
+					
+					DispatchQueue.main.async {
+						outputs.forEach(self.append)
+						self.isBusy = false
+						self.refresh()
+					}
+				}
+			}
+		}
 	}
 	
 	@objc private func updateSelected() {

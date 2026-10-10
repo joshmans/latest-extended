@@ -96,4 +96,54 @@ final class PackageUpdateTest: XCTestCase {
 	func testShellQuoting() {
 		XCTAssertEqual(CommandRunner.shellQuote("it's"), "'it'\\''s'")
 	}
+	
+	// MARK: MacPorts browsing
+	
+	func testParsesSearchLines() {
+		let output = "Warning: port definitions are more than two weeks old\nwget\t1.25.0\tnet www\tinternet file retriever\nwget2\t2.2.1\tnet www\tGNU Wget2\nNo match for xyz found"
+		let results = MacPortsParser.parseSearch(output)
+		XCTAssertEqual(results.map(\.name), ["wget", "wget2"])
+		XCTAssertEqual(results.first?.categories, ["net", "www"])
+		XCTAssertEqual(results.first?.summary, "internet file retriever")
+	}
+	
+	func testParsesInstalledOutput() {
+		let output = "The following ports are currently installed:\n  aom @3.14.1_0 (active)\n  cairo @1.18.3_0\n  cairo @1.18.4_2+quartz+x11 (active)"
+		let parsed = MacPortsParser.parseInstalled(output)
+		XCTAssertEqual(parsed.map(\.name), ["aom", "cairo", "cairo"])
+		XCTAssertEqual(parsed.filter(\.isActive).map(\.version), ["3.14.1_0", "1.18.4_2+quartz+x11"])
+	}
+	
+	func testParsesInfo() {
+		let info = MacPortsParser.parseInfo("Warning: old\nfullname: wget @1.25.0\ncategory: net, www\ndescription: internet file retriever")
+		XCTAssertEqual(info["fullname"], "wget @1.25.0")
+		XCTAssertEqual(info["category"], "net, www")
+	}
+	
+	func testValidatesVariantSelections() {
+		XCTAssertTrue(MacPortsParser.isValidVariantSelection(""))
+		XCTAssertTrue(MacPortsParser.isValidVariantSelection("+x11 -quartz"))
+		XCTAssertFalse(MacPortsParser.isValidVariantSelection("+x11; reboot"))
+		XCTAssertFalse(MacPortsParser.isValidVariantSelection("x11"))
+	}
+	
+	// MARK: Switching
+	
+	private func brew(_ name: String, alternative: String?) -> PackageUpdate {
+		PackageUpdate(manager: .homebrew, name: name, installedVersion: "1", availableVersion: "2", state: .wouldCompile(reason: "x"),
+					  alternative: alternative.map { .init(manager: .macPorts, name: $0, version: "1") })
+	}
+	
+	func testSwitchKeepsFormulaeThatOthersDependOn() {
+		let plan = PackageSwitch.plan(for: [brew("aom", alternative: "aom"), brew("deno", alternative: "deno")], dependents: ["aom": ["ffmpeg"], "deno": []])
+		XCTAssertEqual(plan.toSwitch.map(\.name), ["deno"])
+		XCTAssertEqual(plan.keptBecauseOfDependents.map(\.package.name), ["aom"])
+		XCTAssertEqual(plan.keptBecauseOfDependents.first?.dependents, ["ffmpeg"])
+	}
+	
+	func testSwitchSkipsPackagesWithoutAlternativeOrWithUnsafeName() {
+		let plan = PackageSwitch.plan(for: [brew("git", alternative: nil), brew("evil", alternative: "x; rm -rf /")], dependents: [:])
+		XCTAssertTrue(plan.toSwitch.isEmpty)
+		XCTAssertEqual(plan.withoutAlternative.map(\.name), ["git", "evil"])
+	}
 }

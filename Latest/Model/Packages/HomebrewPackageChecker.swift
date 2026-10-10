@@ -78,6 +78,19 @@ enum HomebrewPackageChecker {
 		return CommandRunner.run(brew, upgradeArguments(for: names), environment: environment)
 	}
 	
+	/// Installed formulae that depend on the given formula.
+	static func dependents(of name: String) -> [String] {
+		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return [] }
+		let result = CommandRunner.run(brew, ["uses", "--installed", "--formula", name], environment: environment)
+		return result.output.split(separator: "\n").map(String.init).filter { !$0.hasPrefix("Warning") && !$0.hasPrefix("Error") && !$0.contains(" ") }
+	}
+	
+	/// Uninstalls a formula. Homebrew itself refuses if other formulae still depend on it, and this never passes `--force` or `--ignore-dependencies`.
+	static func uninstall(_ name: String) -> CommandRunner.Result {
+		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return .init(status: -1, output: "Homebrew is not installed.") }
+		return CommandRunner.run(brew, ["uninstall", "--formula", name], environment: environment)
+	}
+	
 	static func refreshIndex() -> CommandRunner.Result {
 		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return .init(status: -1, output: "Homebrew is not installed.") }
 		return CommandRunner.run(brew, ["update"], environment: ["HOMEBREW_NO_ENV_HINTS": "1"])

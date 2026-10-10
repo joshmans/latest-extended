@@ -22,8 +22,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 		let item = NSMenuItem(title: "Package Updates…", action: #selector(showPackageUpdates), keyEquivalent: "p")
 		item.keyEquivalentModifierMask = [.command, .shift]
 		item.target = self
+		let ports = NSMenuItem(title: "MacPorts…", action: #selector(showMacPorts), keyEquivalent: "m")
+		ports.keyEquivalentModifierMask = [.command, .shift]
+		ports.target = self
 		menu.insertItem(item, at: 0)
-		menu.insertItem(.separator(), at: 1)
+		menu.insertItem(ports, at: 1)
+		menu.insertItem(.separator(), at: 2)
+	}
+	
+	@objc private func showMacPorts() {
+		MacPortsWindowController.shared.show()
 	}
 	
 	@objc private func showPackageUpdates() {

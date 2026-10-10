@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C400B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = C500B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift */; };
+		C410B2C3D4E5F60718293A4B /* MacPortsWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C510B2C3D4E5F60718293A4B /* MacPortsWindowController.swift */; };
 		C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */; };
 		C101B2C3D4E5F60718293A4B /* CommandRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = C201B2C3D4E5F60718293A4B /* CommandRunner.swift */; };
 		C102B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */; };
@@ -101,6 +103,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C500B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPortsBrowsing.swift; sourceTree = "<group>"; };
+		C510B2C3D4E5F60718293A4B /* MacPortsWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPortsWindowController.swift; sourceTree = "<group>"; };
 		C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageUpdate.swift; sourceTree = "<group>"; };
 		C201B2C3D4E5F60718293A4B /* CommandRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandRunner.swift; sourceTree = "<group>"; };
 		C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewPackageChecker.swift; sourceTree = "<group>"; };
@@ -375,6 +379,8 @@
 		C3000000000000000000AAAA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
+				C500B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift */,
+				C510B2C3D4E5F60718293A4B /* MacPortsWindowController.swift */,
 				C200B2C3D4E5F60718293A4B /* PackageUpdate.swift */,
 				C201B2C3D4E5F60718293A4B /* CommandRunner.swift */,
 				C202B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift */,
@@ -985,6 +991,8 @@
 				50290E751E53EB6A00133E3D /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* HomebrewUpdateOperation.swift in Sources */,
 				C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */,
+				C400B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift in Sources */,
+				C410B2C3D4E5F60718293A4B /* MacPortsWindowController.swift in Sources */,
 				C101B2C3D4E5F60718293A4B /* CommandRunner.swift in Sources */,
 				C102B2C3D4E5F60718293A4B /* HomebrewPackageChecker.swift in Sources */,
 				C103B2C3D4E5F60718293A4B /* MacPortsSupport.swift in Sources */,
