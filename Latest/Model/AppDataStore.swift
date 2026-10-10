@@ -55,7 +55,10 @@ class AppDataStore: AppProviding {
 	/// Sets up the scheduler.
 	private func setupScheduler() {
 		// Delay notifying observers to only let that notification occur in a certain interval
-		updateScheduler.setEventHandler() { [unowned self] in
+		// The handler can fire after the store is gone (it runs on a background queue and sleeps), so it must not hold on to or assume `self`.
+		updateScheduler.setEventHandler() { [weak self] in
+			guard let self else { return }
+			
 			updateQueue.sync {
 				let apps = Array(self.apps)
 				self.notifyObservers(apps)
