@@ -85,6 +85,27 @@ enum HomebrewPackageChecker {
 		return result.output.split(separator: "\n").map(String.init).filter { !$0.hasPrefix("Warning") && !$0.hasPrefix("Error") && !$0.contains(" ") }
 	}
 	
+	/// For each installed formula, the installed formulae that depend on it at runtime. One call instead of a slow `brew uses` per formula.
+	static func reverseDependencies() -> [String: [String]] {
+		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return [:] }
+		let result = CommandRunner.run(brew, ["info", "--json=v2", "--installed", "--formula"], environment: environment)
+		return reverseDependencies(fromInfoJSON: result.output)
+	}
+	
+	static func reverseDependencies(fromInfoJSON output: String) -> [String: [String]] {
+		guard let formulae = json(output)?["formulae"] as? [[String: Any]] else { return [:] }
+		var reverse = [String: [String]]()
+		for formula in formulae {
+			guard let name = formula["name"] as? String,
+				  let installed = (formula["installed"] as? [[String: Any]])?.last,
+				  let dependencies = installed["runtime_dependencies"] as? [[String: Any]] else { continue }
+			for dependency in dependencies.compactMap({ $0["full_name"] as? String }) {
+				reverse[dependency, default: []].append(name)
+			}
+		}
+		return reverse
+	}
+	
 	/// Uninstalls a formula. Homebrew itself refuses if other formulae still depend on it, and this never passes `--force` or `--ignore-dependencies`.
 	static func uninstall(_ name: String) -> CommandRunner.Result {
 		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return .init(status: -1, output: "Homebrew is not installed.") }
@@ -96,7 +117,7 @@ enum HomebrewPackageChecker {
 		return CommandRunner.run(brew, ["update"], environment: ["HOMEBREW_NO_ENV_HINTS": "1"])
 	}
 	
-	private static func json(_ output: String) -> [String: Any]? {
+	static func json(_ output: String) -> [String: Any]? {
 		// Skip any warnings printed before the JSON document.
 		guard let start = output.firstIndex(of: "{"), let data = String(output[start...]).data(using: .utf8) else { return nil }
 		return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]

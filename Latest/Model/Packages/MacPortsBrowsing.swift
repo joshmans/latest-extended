@@ -58,35 +58,102 @@ extension MacPortsParser {
 	
 }
 
-/// Plans a one-click switch of Homebrew formulae to their MacPorts equivalents.
+/// Plans a one-click switch of Homebrew formulae to their MacPorts equivalents, including everything that depends on them.
 enum PackageSwitch {
 	
-	struct Plan {
-		/// Packages whose Homebrew copy can be replaced.
-		var toSwitch = [PackageUpdate]()
+	/// Formulae that must move together, because removing one from Homebrew requires removing everything that depends on it.
+	struct Group {
+		/// Formulae in the order Homebrew can uninstall them: dependents first.
+		var formulae: [String]
 		
-		/// Packages that other Homebrew formulae still need. Homebrew's copy stays untouched.
-		var keptBecauseOfDependents = [(package: PackageUpdate, dependents: [String])]()
+		/// The MacPorts port that replaces each formula.
+		var ports: [String: String]
 		
-		/// Packages without a prebuilt MacPorts equivalent.
-		var withoutAlternative = [PackageUpdate]()
+		/// Formulae that were pulled in only because they depend on a selected one.
+		var pulledIn: [String]
 	}
 	
-	static func plan(for packages: [PackageUpdate], dependents: [String: [String]]) -> Plan {
+	struct Plan {
+		var groups = [Group]()
+		
+		/// Selected packages that cannot be switched, with the reason.
+		var blocked = [(package: String, reason: String)]()
+	}
+	
+	/// The largest group that will be switched in one go.
+	static let maximumGroupSize = 25
+	
+	/// - Parameters:
+	///   - selected: The Homebrew packages the user chose.
+	///   - reverseDependencies: For each formula, the installed formulae that depend on it.
+	///   - alternative: The prebuilt MacPorts port replacing a formula, if any.
+	static func plan(selected: [PackageUpdate], reverseDependencies: [String: [String]], alternative: (String) -> String?, maximumGroupSize: Int = PackageSwitch.maximumGroupSize) -> Plan {
 		var plan = Plan()
-		for package in packages where package.manager == .homebrew {
-			guard let alternative = package.alternative, MacPortsParser.isValidPortName(alternative.name) else {
-				plan.withoutAlternative.append(package)
+		let selectedNames = selected.filter { $0.manager == .homebrew }.map(\.name)
+		
+		// Everything that has to move together with each selected formula.
+		var closures = [Set<String>]()
+		for name in selectedNames {
+			var closure: Set<String> = [name]
+			var queue = [name]
+			while let current = queue.popLast() {
+				for dependent in reverseDependencies[current] ?? [] where closure.insert(dependent).inserted {
+					queue.append(dependent)
+				}
+			}
+			closures.append(closure)
+		}
+		
+		// Merge closures that overlap, since removing one needs the other gone as well.
+		var merged = [(members: Set<String>, selected: [String])]()
+		for (index, closure) in closures.enumerated() {
+			let overlapping = merged.indices.filter { !merged[$0].members.isDisjoint(with: closure) }
+			var group = (members: closure, selected: [selectedNames[index]])
+			for position in overlapping.reversed() {
+				group.members.formUnion(merged[position].members)
+				group.selected += merged[position].selected
+				merged.remove(at: position)
+			}
+			merged.append(group)
+		}
+		
+		for entry in merged {
+			let names = entry.selected.sorted().joined(separator: ", ")
+			if entry.members.count > maximumGroupSize {
+				for name in entry.selected { plan.blocked.append((name, "It would pull in \(entry.members.count) packages (limit \(maximumGroupSize))")) }
 				continue
 			}
-			let users = dependents[package.name] ?? []
-			if users.isEmpty {
-				plan.toSwitch.append(package)
-			} else {
-				plan.keptBecauseOfDependents.append((package, users))
+			
+			var ports = [String: String]()
+			var missing: String?
+			for member in entry.members.sorted() {
+				if let port = alternative(member), MacPortsParser.isValidPortName(port) { ports[member] = port } else { missing = member; break }
 			}
+			if let missing {
+				let reason = entry.selected.contains(missing)
+					? "No prebuilt MacPorts equivalent"
+					: "\(missing) depends on it and has no prebuilt MacPorts equivalent"
+				for name in entry.selected { plan.blocked.append((name, reason)) }
+				_ = names
+				continue
+			}
+			
+			plan.groups.append(Group(formulae: uninstallOrder(entry.members, reverseDependencies), ports: ports, pulledIn: entry.members.subtracting(entry.selected).sorted()))
 		}
 		return plan
+	}
+	
+	/// Orders formulae so each one comes after everything in the set that depends on it.
+	static func uninstallOrder(_ members: Set<String>, _ reverseDependencies: [String: [String]]) -> [String] {
+		var remaining = members
+		var ordered = [String]()
+		while !remaining.isEmpty {
+			let ready = remaining.filter { name in (reverseDependencies[name] ?? []).allSatisfy { !remaining.contains($0) } }.sorted()
+			guard !ready.isEmpty else { ordered += remaining.sorted(); break }
+			ordered += ready
+			remaining.subtract(ready)
+		}
+		return ordered
 	}
 	
 }

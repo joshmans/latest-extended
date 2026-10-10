@@ -180,33 +180,41 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		table.selectedRowIndexes.compactMap { $0 < packages.count ? packages[$0] : nil }.filter { $0.manager == .homebrew && $0.alternative != nil }
 	}
 	
-	/// Replaces selected Homebrew formulae with their prebuilt MacPorts equivalents, keeping only the MacPorts copy.
+	/// Replaces selected Homebrew formulae, and everything that depends on them, with prebuilt MacPorts equivalents, keeping only the MacPorts copies.
 	@objc private func switchToMacPorts() {
 		let selected = selectedSwitchablePackages
 		guard !selected.isEmpty else { return }
 		isBusy = true
-		statusLabel.stringValue = "Checking what depends on the selected formulae…"
+		statusLabel.stringValue = "Working out what depends on the selected formulae…"
 		
 		DispatchQueue.global().async {
-			var dependents = [String: [String]]()
-			for package in selected { dependents[package.name] = HomebrewPackageChecker.dependents(of: package.name) }
-			let plan = PackageSwitch.plan(for: selected, dependents: dependents)
+			let reverse = HomebrewPackageChecker.reverseDependencies()
+			var known = Dictionary(uniqueKeysWithValues: selected.compactMap { package in package.alternative.map { (package.name, Optional($0.name)) } })
+			let plan = PackageSwitch.plan(selected: selected, reverseDependencies: reverse) { formula in
+				if let cached = known[formula] { return cached }
+				let port = MacPortsPackageChecker.equivalent(forHomebrewFormula: formula)?.name
+				known[formula] = .some(port)
+				return port
+			}
 			
 			DispatchQueue.main.async {
-				var kept = plan.keptBecauseOfDependents.map { "• \($0.package.name) stays in Homebrew: needed by \($0.dependents.joined(separator: ", "))" }
-				if plan.toSwitch.isEmpty {
-					kept.forEach(self.append)
-					self.statusLabel.stringValue = "Nothing can be switched: other Homebrew formulae depend on the selection."
+				let blocked = plan.blocked.map { "• \($0.package) stays in Homebrew: \($0.reason)" }
+				guard !plan.groups.isEmpty else {
+					blocked.forEach(self.append)
+					self.statusLabel.stringValue = "Nothing can be switched. See the log for why."
 					self.isBusy = false
 					return
 				}
 				
 				let alert = NSAlert()
-				alert.messageText = "Switch \(plan.toSwitch.count) package(s) to MacPorts?"
-				alert.informativeText = "Each prebuilt MacPorts port is installed first. Only after it is confirmed installed is the Homebrew formula uninstalled.\n\n"
-					+ plan.toSwitch.map { "• \($0.name) → port \($0.alternative!.name) \($0.alternative!.version)" }.joined(separator: "\n")
-					+ (kept.isEmpty ? "" : "\n\nKept in Homebrew:\n" + kept.joined(separator: "\n"))
-					+ "\n\nMacPorts versions can be older than Homebrew's. Make sure /opt/local/bin is on your PATH before /usr/local/bin."
+				alert.messageText = "Switch \(plan.groups.reduce(0) { $0 + $1.formulae.count }) package(s) to MacPorts?"
+				var text = "Every prebuilt MacPorts port is installed first. Homebrew formulae are only uninstalled after all ports of their group are confirmed installed, dependents first.\n"
+				for group in plan.groups {
+					text += "\n" + group.formulae.map { "• \($0) → port \(group.ports[$0] ?? "?")" + (group.pulledIn.contains($0) ? "  (depends on your selection)" : "") }.joined(separator: "\n") + "\n"
+				}
+				if !blocked.isEmpty { text += "\nKept in Homebrew:\n" + blocked.joined(separator: "\n") + "\n" }
+				text += "\nMacPorts versions can be older than Homebrew's. Make sure /opt/local/bin is on your PATH before /usr/local/bin."
+				alert.informativeText = text
 				alert.addButton(withTitle: "Switch")
 				alert.addButton(withTitle: "Cancel")
 				guard alert.runModal() == .alertFirstButtonReturn else {
@@ -215,21 +223,27 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 					return
 				}
 				
+				blocked.forEach(self.append)
 				self.statusLabel.stringValue = "Installing MacPorts equivalents…"
-				kept.forEach(self.append)
 				DispatchQueue.global().async {
-					let ports = plan.toSwitch.compactMap { $0.alternative?.name }
+					let ports = Array(Set(plan.groups.flatMap { $0.ports.values })).sorted()
 					var outputs = [String]()
 					let install = MacPortsPackageChecker.install(ports)
 					outputs.append("port -b install \(ports.joined(separator: " ")): exit \(install.status)\n" + install.output.suffix(1500))
 					
-					for package in plan.toSwitch {
-						guard let port = package.alternative?.name else { continue }
-						if MacPortsPackageChecker.isActive(port) {
-							let removal = HomebrewPackageChecker.uninstall(package.name)
-							outputs.append("brew uninstall \(package.name): exit \(removal.status)\n" + removal.output.suffix(600))
-						} else {
-							outputs.append("\(package.name): MacPorts install of \(port) did not complete, Homebrew copy left in place.")
+					for group in plan.groups {
+						let missing = group.ports.values.filter { !MacPortsPackageChecker.isActive($0) }
+						guard missing.isEmpty else {
+							outputs.append("Kept \(group.formulae.joined(separator: ", ")) in Homebrew: MacPorts did not install \(missing.sorted().joined(separator: ", ")).")
+							continue
+						}
+						for formula in group.formulae {
+							let removal = HomebrewPackageChecker.uninstall(formula)
+							outputs.append("brew uninstall \(formula): exit \(removal.status)\n" + removal.output.suffix(600))
+							if removal.status != 0 {
+								outputs.append("Stopped this group at \(formula). The remaining formulae were left in place; their MacPorts copies stay installed.")
+								break
+							}
 						}
 					}
 					

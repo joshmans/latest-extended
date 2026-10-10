@@ -93,6 +93,16 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertNil(MacPortsParser.newestArchiveVersion(inListing: html, port: "rust", darwin: 27, arch: "x86_64"))
 	}
 	
+	func testNoarchArchivesCountAsPrebuilt() {
+		let html = "<a href=\"yt-dlp-2026.08.19_0+ffmpeg+python314.darwin_any.noarch.tbz2\">a</a><a href=\"yt-dlp-2026.06.09_0+python314.darwin_any.noarch.tbz2\">b</a>"
+		XCTAssertEqual(MacPortsParser.newestArchiveVersion(inListing: html, port: "yt-dlp", darwin: 25, arch: "x86_64"), "2026.08.19_0+ffmpeg+python314")
+	}
+	
+	func testChecksBothArchitectureSpecificAndNoarchURLs() {
+		let urls = MacPortsParser.archiveURLs(name: "pipx", version: "1.17.2_0", variants: "+python314", darwin: 25, arch: "x86_64").map(\.lastPathComponent)
+		XCTAssertEqual(urls, ["pipx-1.17.2_0+python314.darwin_25.x86_64.tbz2", "pipx-1.17.2_0+python314.darwin_any.noarch.tbz2"])
+	}
+	
 	func testShellQuoting() {
 		XCTAssertEqual(CommandRunner.shellQuote("it's"), "'it'\\''s'")
 	}
@@ -134,16 +144,59 @@ final class PackageUpdateTest: XCTestCase {
 					  alternative: alternative.map { .init(manager: .macPorts, name: $0, version: "1") })
 	}
 	
-	func testSwitchKeepsFormulaeThatOthersDependOn() {
-		let plan = PackageSwitch.plan(for: [brew("aom", alternative: "aom"), brew("deno", alternative: "deno")], dependents: ["aom": ["ffmpeg"], "deno": []])
-		XCTAssertEqual(plan.toSwitch.map(\.name), ["deno"])
-		XCTAssertEqual(plan.keptBecauseOfDependents.map(\.package.name), ["aom"])
-		XCTAssertEqual(plan.keptBecauseOfDependents.first?.dependents, ["ffmpeg"])
+	private let ports = ["aom": "aom", "ffmpeg": "ffmpeg", "deno": "deno", "yt-dlp": "yt-dlp", "gh": "gh", "imagemagick": "imagemagick"]
+	
+	func testSwitchPullsDependentsIntoTheGroupAndOrdersThemFirst() {
+		let reverse = ["aom": ["ffmpeg"], "ffmpeg": ["imagemagick"]]
+		let plan = PackageSwitch.plan(selected: [brew("aom", alternative: "aom")], reverseDependencies: reverse, alternative: { self.ports[$0] })
+		XCTAssertEqual(plan.groups.count, 1)
+		XCTAssertEqual(plan.groups.first?.formulae, ["imagemagick", "ffmpeg", "aom"])
+		XCTAssertEqual(plan.groups.first?.pulledIn, ["ffmpeg", "imagemagick"])
+		XCTAssertTrue(plan.blocked.isEmpty)
 	}
 	
-	func testSwitchSkipsPackagesWithoutAlternativeOrWithUnsafeName() {
-		let plan = PackageSwitch.plan(for: [brew("git", alternative: nil), brew("evil", alternative: "x; rm -rf /")], dependents: [:])
-		XCTAssertTrue(plan.toSwitch.isEmpty)
-		XCTAssertEqual(plan.withoutAlternative.map(\.name), ["git", "evil"])
+	func testSwitchBlocksGroupWhenADependentHasNoEquivalent() {
+		let plan = PackageSwitch.plan(selected: [brew("deno", alternative: "deno")], reverseDependencies: ["deno": ["yt-dlp"]], alternative: { $0 == "deno" ? "deno" : nil })
+		XCTAssertTrue(plan.groups.isEmpty)
+		XCTAssertEqual(plan.blocked.first?.package, "deno")
+		XCTAssertTrue(plan.blocked.first?.reason.contains("yt-dlp") ?? false)
+	}
+	
+	func testSwitchRefusesOversizedGroups() {
+		let reverse = ["aom": (0..<30).map { "dep\($0)" }]
+		let plan = PackageSwitch.plan(selected: [brew("aom", alternative: "aom")], reverseDependencies: reverse, alternative: { $0 })
+		XCTAssertTrue(plan.groups.isEmpty)
+		XCTAssertTrue(plan.blocked.first?.reason.contains("limit") ?? false)
+	}
+	
+	func testOverlappingSelectionsMergeIntoOneGroup() {
+		let plan = PackageSwitch.plan(selected: [brew("a", alternative: "a"), brew("b", alternative: "b")], reverseDependencies: ["a": ["shared"], "b": ["shared"]], alternative: { $0 })
+		XCTAssertEqual(plan.groups.count, 1)
+		XCTAssertEqual(Set(plan.groups[0].formulae), ["a", "b", "shared"])
+		XCTAssertEqual(plan.groups[0].formulae.first, "shared")
+	}
+	
+	func testIndependentPackagesStaySeparateGroups() {
+		let plan = PackageSwitch.plan(selected: [brew("gh", alternative: "gh"), brew("deno", alternative: "deno")], reverseDependencies: [:], alternative: { self.ports[$0] })
+		XCTAssertEqual(plan.groups.count, 2)
+	}
+	
+	func testRejectsUnsafePortNameFromAlternative() {
+		let plan = PackageSwitch.plan(selected: [brew("evil", alternative: "x")], reverseDependencies: [:], alternative: { _ in "x; rm -rf /" })
+		XCTAssertTrue(plan.groups.isEmpty)
+		XCTAssertEqual(plan.blocked.count, 1)
+	}
+	
+	func testBuildsReverseDependenciesFromBrewJSON() {
+		let json = """
+		{"formulae":[
+		 {"name":"aom","installed":[{"runtime_dependencies":[]}]},
+		 {"name":"ffmpeg","installed":[{"runtime_dependencies":[{"full_name":"aom"},{"full_name":"x265"}]}]},
+		 {"name":"yt-dlp","installed":[{"runtime_dependencies":[{"full_name":"deno"}]}]}
+		]}
+		"""
+		let reverse = HomebrewPackageChecker.reverseDependencies(fromInfoJSON: json)
+		XCTAssertEqual(reverse["aom"], ["ffmpeg"])
+		XCTAssertEqual(reverse["deno"], ["yt-dlp"])
 	}
 }

@@ -59,9 +59,11 @@ enum MacPortsParser {
 		return names.filter { seen.insert($0).inserted }
 	}
 	
-	/// Finds the newest archive for a port on the given system in a `packages.macports.org/<port>/` directory listing.
+	/// Finds the newest archive for a port that works on the given system in a `packages.macports.org/<port>/` directory listing.
+	///
+	/// Architecture independent ports (pure Python or scripts) are published as `darwin_any.noarch` and work everywhere.
 	static func newestArchiveVersion(inListing html: String, port: String, darwin: Int, arch: String) -> String? {
-		let suffix = ".darwin_\(darwin).\(arch).tbz2"
+		let suffixes = [".darwin_\(darwin).\(arch).tbz2", ".darwin_any.noarch.tbz2"]
 		let prefix = "\(port)-"
 		var found = [String]()
 		var rest = html[...]
@@ -69,11 +71,19 @@ enum MacPortsParser {
 			rest = rest[range.upperBound...]
 			guard let end = rest.firstIndex(of: "\"") else { break }
 			let file = String(rest[..<end])
-			if file.hasPrefix(prefix), file.hasSuffix(suffix) {
+			if file.hasPrefix(prefix), let suffix = suffixes.first(where: file.hasSuffix) {
 				found.append(String(file.dropFirst(prefix.count).dropLast(suffix.count)))
 			}
 		}
 		return found.sorted { $0.compare($1, options: .numeric) == .orderedAscending }.last
+	}
+	
+	/// The URLs a prebuilt archive for a port version can have on the given system: architecture specific, or architecture independent.
+	static func archiveURLs(name: String, version: String, variants: String, darwin: Int, arch: String) -> [URL] {
+		let base = URL(string: "https://packages.macports.org/\(name)/")
+		return ["darwin_\(darwin).\(arch)", "darwin_any.noarch"].compactMap {
+			base?.appendingPathComponent("\(name)-\(version)\(variants).\($0).tbz2")
+		}
 	}
 	
 }
@@ -105,8 +115,7 @@ enum MacPortsPackageChecker {
 			let variants = MacPortsParser.activeVariants(in: installed, name: entry.name)
 			
 			var state = PackageUpdate.State.wouldCompile(reason: "No prebuilt archive for this Mac yet")
-			if let url = MacPortsParser.archiveURL(name: entry.name, version: entry.available, variants: variants, darwin: darwin, arch: arch),
-			   Network.exists(url) {
+			if MacPortsParser.archiveURLs(name: entry.name, version: entry.available, variants: variants, darwin: darwin, arch: arch).contains(where: Network.exists) {
 				state = .prebuilt
 			}
 			return PackageUpdate(manager: .macPorts, name: entry.name, installedVersion: entry.installed, availableVersion: entry.available, state: state)
