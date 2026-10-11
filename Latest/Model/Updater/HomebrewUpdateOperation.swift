@@ -7,6 +7,33 @@
 
 import Foundation
 
+/// Appends diagnostics about update operations to `~/Library/Logs/Latest/updates.log`.
+enum UpdateLog {
+	
+	private static let queue = DispatchQueue(label: "UpdateLog")
+	
+	static let url: URL = {
+		let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Latest", isDirectory: true)
+		try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+		return directory.appendingPathComponent("updates.log")
+	}()
+	
+	static func write(_ message: String) {
+		queue.sync {
+			let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+			guard let data = line.data(using: .utf8) else { return }
+			if let handle = try? FileHandle(forWritingTo: url) {
+				handle.seekToEndOfFile()
+				handle.write(data)
+				try? handle.close()
+			} else {
+				try? data.write(to: url)
+			}
+		}
+	}
+	
+}
+
 /// The operation updating apps through Homebrew casks.
 ///
 /// Casks ship prebuilt app bundles, so this never compiles anything from source.
@@ -14,6 +41,12 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 	
 	/// The Homebrew cask token of the app.
 	private let caskToken: String
+	
+	/// Homebrew takes locks and shares downloads between casks, so only one brew process runs at a time.
+	private static let brewLock = NSLock()
+	
+	/// Incremented for every finished update so that a burst of updates triggers only one rescan.
+	private static var rescanGeneration = 0
 	
 	/// The running brew process, kept for cancellation.
 	private var process: Process?
@@ -36,7 +69,10 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 	override func execute() {
 		super.execute()
 		
+		UpdateLog.write("[\(caskToken)] starting Homebrew update")
+		
 		guard let brew = Self.brewURL else {
+			UpdateLog.write("[\(caskToken)] brew not found")
 			finish(with: LatestError.custom(title: "Homebrew is not installed", description: "Install Homebrew from brew.sh to update this app."))
 			return
 		}
@@ -48,7 +84,11 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 			: ["install", "--cask", "--force", caskToken]
 		
 		progressState = .installing
+		Self.brewLock.lock()
+		UpdateLog.write("[\(caskToken)] brew \(arguments.joined(separator: " "))")
 		let result = run(brew, arguments)
+		Self.brewLock.unlock()
+		UpdateLog.write("[\(caskToken)] exit \(result.status)\(result.status == 0 ? "" : ": " + result.output.suffix(1500))")
 		
 		if isCancelled {
 			finish()
@@ -56,6 +96,20 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 			finish(with: LatestError.custom(title: "Homebrew could not update this app", description: String(result.output.suffix(600))))
 		} else {
 			finish()
+			Self.scheduleRescan()
+		}
+	}
+	
+	/// Brew replaces the app bundle behind Latest's back, so the list keeps showing the old version until the apps are checked again.
+	private static func scheduleRescan() {
+		DispatchQueue.main.async {
+			rescanGeneration += 1
+			let generation = rescanGeneration
+			DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+				guard generation == rescanGeneration else { return }
+				UpdateLog.write("rescanning apps after Homebrew updates")
+				UpdateCheckCoordinator.shared.rescanApps()
+			}
 		}
 	}
 	

@@ -61,6 +61,11 @@ class AppDirectory {
 		collectBundles()
 	}
 	
+	/// Reads the directory again, for changes the file system listener did not report (e.g. bundles replaced by Homebrew).
+	func refresh() {
+		collectBundles()
+	}
+	
 	/// Triggers an update run
 	private func collectBundles() {
 		bundles = BundleCollector.collectBundles(at: self.url)

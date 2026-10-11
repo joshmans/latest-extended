@@ -55,6 +55,7 @@ class HomebrewCheckerOperation: StatefulOperation, UpdateCheckerOperation, @unch
 			defer { self.finish() }
 			guard let version, let token else { return }
 			self.update = App.Update(app: bundle, remoteVersion: version, minimumOSVersion: minimumOSVersion, source: .homebrew, date: nil, releaseNotes: nil, updateAction: .builtIn(block: { app in
+				UpdateLog.write("[\(token)] update requested for \(app.bundleIdentifier)")
 				UpdateQueue.shared.addOperation(HomebrewUpdateOperation(bundleIdentifier: app.bundleIdentifier, appIdentifier: app.identifier, caskToken: token))
 			}))
 		}

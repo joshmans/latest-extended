@@ -80,6 +80,11 @@ class UpdateCheckCoordinator {
 		return operationQueue
 	}()
 	
+	/// Re-reads the app directories and checks apps whose bundles changed.
+	func rescanApps() {
+		self.library.refresh()
+	}
+	
 	/// Initiate the update check, if not already running.
 	func run() {
 		self.progressDelegate?.updateCheckerDidStartScanningForApps(self)

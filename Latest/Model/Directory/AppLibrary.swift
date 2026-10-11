@@ -46,6 +46,13 @@ class AppLibrary {
 	
 	// MARK: - Actions
 	
+	/// Re-reads all observed directories. Changed bundles are checked for updates again.
+	func refresh() {
+		DispatchQueue.global().async {
+			self.directories.values.forEach { $0.refresh() }
+		}
+	}
+	
 	/// Starts the update checking process
 	func startQuery() {
 		DispatchQueue.global().async {
