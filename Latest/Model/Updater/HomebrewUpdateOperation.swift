@@ -42,7 +42,9 @@ enum UpdateLog {
 
 /// Lets brew's `sudo` ask for the administrator password with a macOS dialog.
 ///
-/// Brew runs without a terminal, so installers that need `sudo` would otherwise fail with "a terminal is required". Brew adds `sudo -A` when `SUDO_ASKPASS` is set, which calls this script. The password goes from the dialog straight to sudo; it is never stored or logged.
+/// Brew runs without a terminal, so installers that need `sudo` would otherwise fail with "a terminal is required". Brew adds `sudo -A` when `SUDO_ASKPASS` is set, which calls this script.
+///
+/// The dialog offers "All This Session". That password is checked against `sudo`, then kept in Latest's memory only (never written to disk or logged) and handed to later askpass calls through a socket that only this user can reach. It is forgotten after 30 minutes or when Latest quits.
 enum AskpassHelper {
 	
 	private static var directory: URL {
@@ -52,23 +54,58 @@ enum AskpassHelper {
 	/// Holds the text for the dialog. `sudo` hides the environment from the script, so the reason travels through this file. Updates run one at a time, so there is only ever one current reason.
 	private static var reasonURL: URL { directory.appendingPathComponent("askpass-reason.txt") }
 	
+	static var socketURL: URL { directory.appendingPathComponent("askpass.sock") }
+	
+	private static func shellQuote(_ string: String) -> String {
+		"'" + string.replacingOccurrences(of: "'", with: "'\\''") + "'"
+	}
+	
 	private static var scriptContents: String {
-		let reasonPath = reasonURL.path.replacingOccurrences(of: "'", with: "'\\''")
 		return """
 		#!/bin/bash
 		# Written by Latest. Shows a password dialog for sudo -A.
-		REASON=$(/bin/cat '\(reasonPath)' 2>/dev/null)
-		exec /usr/bin/osascript - "${REASON:-Homebrew needs your administrator password.}" <<'APPLESCRIPT'
+		SOCK=\(shellQuote(socketURL.path))
+		REASON=$(/bin/cat \(shellQuote(reasonURL.path)) 2>/dev/null)
+		REASON=${REASON:-Homebrew needs your administrator password.}
+		
+		# A password the user chose to keep for this session.
+		CACHED=$(printf 'GET\\n' | /usr/bin/nc -w 2 -U "$SOCK" 2>/dev/null | /usr/bin/head -n 1)
+		if [ -n "$CACHED" ]; then
+			printf '%s\\n' "$CACHED"
+			exit 0
+		fi
+		
+		valid() { printf '%s\\n' "$1" | /usr/bin/sudo -S -k -p '' -v >/dev/null 2>&1; }
+		
+		MESSAGE="$REASON"
+		PASSWORD=""
+		for ATTEMPT in 1 2 3; do
+			OUT=$(/usr/bin/osascript - "$MESSAGE" <<'APPLESCRIPT'
 		on run argv
 			try
-				set answer to display dialog (item 1 of argv) default answer "" with hidden answer with title "Latest" with icon caution buttons {"Cancel", "OK"} default button "OK" giving up after 300
+				set answer to display dialog (item 1 of argv) default answer "" with hidden answer with title "Latest" with icon caution buttons {"Cancel", "This App Only", "All This Session"} default button "All This Session" cancel button "Cancel" giving up after 300
 				if gave up of answer then error number -128
-				return text returned of answer
+				return (button returned of answer) & linefeed & (text returned of answer)
 			on error
 				error number -128
 			end try
 		end run
 		APPLESCRIPT
+			) || exit 1
+			BUTTON=$(printf '%s\\n' "$OUT" | /usr/bin/head -n 1)
+			PASSWORD=$(printf '%s\\n' "$OUT" | /usr/bin/tail -n +2 | /usr/bin/head -n 1)
+			if [ -n "$PASSWORD" ] && valid "$PASSWORD"; then
+				if [ "$BUTTON" = "All This Session" ]; then
+					printf 'SET\\n%s\\n' "$PASSWORD" | /usr/bin/nc -w 2 -U "$SOCK" >/dev/null 2>&1
+				fi
+				printf '%s\\n' "$PASSWORD"
+				exit 0
+			fi
+			MESSAGE="That password was not accepted. Try again.
+
+		$REASON"
+		done
+		exit 1
 		
 		"""
 	}
@@ -80,12 +117,13 @@ enum AskpassHelper {
 		
 		if (try? String(contentsOf: url, encoding: .utf8)) != contents {
 			do {
-				try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+				try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 				try contents.write(to: url, atomically: true, encoding: .utf8)
 			} catch {
 				return nil
 			}
 		}
+		try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
 		try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
 		return url
 	}
@@ -94,7 +132,107 @@ enum AskpassHelper {
 	static func environment(reason: String) -> [String: String] {
 		guard let url = scriptURL else { return [:] }
 		try? reason.write(to: reasonURL, atomically: true, encoding: .utf8)
+		SessionPasswordServer.shared.startIfNeeded()
 		return ["SUDO_ASKPASS": url.path]
+	}
+	
+}
+
+/// Serves the session password to the askpass script over a Unix socket in the user's private folder.
+///
+/// Protocol: a client sends `GET` and receives the password (or nothing), or sends `SET` and the password on the next line.
+final class SessionPasswordServer: @unchecked Sendable {
+	
+	static let shared = SessionPasswordServer()
+	
+	private let queue = DispatchQueue(label: "SessionPasswordServer")
+	private var listener: DispatchSourceRead?
+	private var password: String?
+	private var expiry: Date?
+	
+	/// How long a kept password stays valid.
+	private static let lifetime: TimeInterval = 30 * 60
+	
+	func startIfNeeded() {
+		queue.sync {
+			guard listener == nil else { return }
+			
+			let path = AskpassHelper.socketURL.path
+			unlink(path)
+			
+			let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+			guard descriptor >= 0 else { return }
+			
+			var address = sockaddr_un()
+			address.sun_family = sa_family_t(AF_UNIX)
+			let capacity = MemoryLayout.size(ofValue: address.sun_path)
+			guard path.utf8.count < capacity else { close(descriptor); return }
+			withUnsafeMutablePointer(to: &address.sun_path) {
+				$0.withMemoryRebound(to: CChar.self, capacity: capacity) { _ = strlcpy($0, path, capacity) }
+			}
+			
+			let bound = withUnsafePointer(to: &address) {
+				$0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+			}
+			guard bound == 0, listen(descriptor, 8) == 0 else { close(descriptor); return }
+			chmod(path, 0o600)
+			
+			let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
+			source.setEventHandler { [weak self] in
+				let client = accept(descriptor, nil, nil)
+				if client >= 0 { self?.handle(client) }
+			}
+			source.setCancelHandler { close(descriptor); unlink(path) }
+			source.resume()
+			listener = source
+		}
+	}
+	
+	/// Forgets the password and closes the socket.
+	func stop() {
+		queue.sync {
+			password = nil
+			listener?.cancel()
+			listener = nil
+		}
+	}
+	
+	private func handle(_ client: Int32) {
+		defer { close(client) }
+		
+		// Only this user may talk to the server.
+		var uid: uid_t = 0, gid: gid_t = 0
+		guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { return }
+		
+		var timeout = timeval(tv_sec: 2, tv_usec: 0)
+		setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+		
+		var data = Data()
+		var buffer = [UInt8](repeating: 0, count: 1024)
+		while data.count < 4096 {
+			let count = read(client, &buffer, buffer.count)
+			if count <= 0 { break }
+			data.append(buffer, count: count)
+			// A SET carries two lines, a GET one.
+			let lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n")
+			if lines.first == "GET" && lines.count > 1 { break }
+			if lines.first == "SET" && lines.count > 2 { break }
+		}
+		
+		let lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n")
+		switch lines.first {
+		case "GET":
+			if let expiry, expiry < Date() { password = nil }
+			if let password {
+				let reply = Array((password + "\n").utf8)
+				_ = write(client, reply, reply.count)
+			}
+		case "SET" where lines.count > 2 && !lines[1].isEmpty:
+			password = lines[1]
+			expiry = Date().addingTimeInterval(Self.lifetime)
+		default:
+			break
+		}
 	}
 	
 }

@@ -39,6 +39,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 	}
 
     func applicationWillTerminate(_ aNotification: Notification) {
+		SessionPasswordServer.shared.stop()
         // Insert code here to tear down your application
     }
 	
