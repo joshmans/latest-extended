@@ -18,9 +18,15 @@ enum UpdateLog {
 		return directory.appendingPathComponent("updates.log")
 	}()
 	
+	/// Posted on the main thread for every line written. The line is in `userInfo["line"]`.
+	static let didAppend = Notification.Name("UpdateLogDidAppend")
+	
 	static func write(_ message: String) {
+		let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+		DispatchQueue.main.async {
+			NotificationCenter.default.post(name: didAppend, object: nil, userInfo: ["line": line])
+		}
 		queue.sync {
-			let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
 			guard let data = line.data(using: .utf8) else { return }
 			if let handle = try? FileHandle(forWritingTo: url) {
 				handle.seekToEndOfFile()
@@ -96,12 +102,12 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 		UpdateLog.write("[\(caskToken)] brew \(arguments.joined(separator: " "))")
 		let result = run(brew, arguments)
 		Self.brewLock.unlock()
-		UpdateLog.write("[\(caskToken)] exit \(result.status)\(result.status == 0 ? "" : ": " + result.output.suffix(1500))")
+		UpdateLog.write("[\(caskToken)] exit \(result.status)")
 		
 		if isCancelled {
 			finish()
 		} else if result.status != 0 {
-			finish(with: LatestError.custom(title: "Homebrew could not update this app", description: String(result.output.suffix(600))))
+			finish(with: LatestError.custom(title: "Homebrew could not update this app", description: Self.failureSummary(result.output)))
 		} else {
 			finish()
 			Self.scheduleRescan()
@@ -146,15 +152,50 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 		process.standardError = pipe
 		self.process = process
 		
+		// Stream the output into the log as it arrives, so a running update can be watched.
+		let lock = NSLock()
+		var collected = Data()
+		var partialLine = ""
+		let token = caskToken
+		pipe.fileHandleForReading.readabilityHandler = { handle in
+			let data = handle.availableData
+			guard !data.isEmpty else { return }
+			lock.lock()
+			collected.append(data)
+			partialLine += String(decoding: data, as: UTF8.self)
+			var lines = partialLine.components(separatedBy: .newlines)
+			partialLine = lines.removeLast()
+			lock.unlock()
+			for line in lines where !line.trimmingCharacters(in: .whitespaces).isEmpty {
+				UpdateLog.write("[\(token)] | \(line)")
+			}
+		}
+		
 		do {
 			try process.run()
 		} catch {
+			pipe.fileHandleForReading.readabilityHandler = nil
 			return (-1, error.localizedDescription)
 		}
 		
-		let data = pipe.fileHandleForReading.readDataToEndOfFile()
 		process.waitUntilExit()
-		return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+		// Let the handler drain what is left, then stop it.
+		Thread.sleep(forTimeInterval: 0.2)
+		pipe.fileHandleForReading.readabilityHandler = nil
+		let rest = pipe.fileHandleForReading.readDataToEndOfFile()
+		lock.lock()
+		collected.append(rest)
+		lock.unlock()
+		let output = String(decoding: collected, as: UTF8.self)
+		return (process.terminationStatus, output)
+	}
+	
+	/// The lines of brew output that explain a failure, without the Intel support banner brew prints around them.
+	private static func failureSummary(_ output: String) -> String {
+		let lines = output.components(separatedBy: .newlines)
+		let relevant = lines.filter { $0.hasPrefix("Error:") || $0.hasPrefix("sudo:") }
+		let summary = (relevant.isEmpty ? Array(lines.suffix(8)) : relevant).joined(separator: "\n")
+		return String(summary.suffix(600))
 	}
 	
 }
