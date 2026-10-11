@@ -132,6 +132,19 @@ class UpdateCell: NSTableCellView {
 	}
 	    
 	private func updateTitle() {
-		self.nameTextField.attributedStringValue = self.app?.highlightedName(for: self.filterQuery) ?? NSAttributedString()
+		let title = NSMutableAttributedString(attributedString: self.app?.highlightedName(for: self.filterQuery) ?? NSAttributedString())
+		
+		// Mark Mac App Store apps with the App Store icon after the name.
+		if self.app?.source == .appStore, let icon = App.Source.appStore.sourceIcon {
+			let size = (self.nameTextField.font?.pointSize ?? 13) + 1
+			let attachment = NSTextAttachment()
+			attachment.image = icon
+			attachment.bounds = CGRect(x: 0, y: -2.5, width: size, height: size)
+			title.append(NSAttributedString(string: "  "))
+			title.append(NSAttributedString(attachment: attachment))
+		}
+		
+		self.nameTextField.attributedStringValue = title
+		self.nameTextField.toolTip = self.app?.source == .appStore ? "Updated through the Mac App Store" : nil
 	}
 }

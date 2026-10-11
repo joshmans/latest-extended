@@ -24,6 +24,13 @@ extension App {
 		/// Homebrew is the update source.
 		case homebrew
 		
+		/// The App Store app's own icon.
+		private static let appStoreIcon: NSImage? = {
+			let path = "/System/Applications/App Store.app"
+			guard FileManager.default.fileExists(atPath: path) else { return nil }
+			return NSWorkspace.shared.icon(forFile: path)
+		}()
+		
 		/// The icon representing the source.
 		var sourceIcon: NSImage? {
 			switch self {
@@ -32,7 +39,7 @@ extension App {
 			case .sparkle:
 				return NSImage(named: "sparkle")
 			case .appStore:
-				return NSImage(named: "appstore")
+				return Self.appStoreIcon
 			case .homebrew:
 				return NSImage(named: "brew")
 			}
