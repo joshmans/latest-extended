@@ -318,4 +318,45 @@ final class PackageUpdateTest: XCTestCase {
 		_ = PackageSwitch.plan(selected: [brew("a", alternative: "a"), brew("b", alternative: "b")], reverseDependencies: reverse, alternative: { lookups[$0, default: 0] += 1; return $0 })
 		XCTAssertTrue(lookups.values.allSatisfy { $0 == 1 }, "\(lookups)")
 	}
+	
+	// MARK: Cask dependencies
+	
+	func testReadsFormulaDependenciesOfCask() {
+		let json = #"{"casks":[{"token":"x","depends_on":{"formula":["gnupg","wget"],"macos":{">=":["14"]}}}]}"#
+		XCTAssertEqual(HomebrewPackageChecker.formulaDependencies(fromCaskInfoJSON: json), ["gnupg", "wget"])
+		XCTAssertEqual(HomebrewPackageChecker.formulaDependencies(fromCaskInfoJSON: #"{"casks":[{"token":"x","depends_on":{}}]}"#), [])
+	}
+	
+	private func formula(installed: Bool = false, outdated: Bool = false, bottles: [String] = [], dependencies: [String] = []) -> [String: Any] {
+		["installed": installed ? [["version": "1"]] : [], "outdated": outdated, "dependencies": dependencies,
+		 "bottle": ["stable": ["files": Dictionary(uniqueKeysWithValues: bottles.map { ($0, [String: Any]()) })]]]
+	}
+	
+	func testMissingFormulaWithoutIntelBottleBlocks() {
+		let details = ["a": formula(bottles: ["arm64_tahoe"])]
+		let result = HomebrewPackageChecker.compileBlockers(roots: ["a"], details: details, arm64: false, macOSMajor: 26)
+		XCTAssertEqual(result.blockers, ["a"])
+	}
+	
+	func testInstalledCurrentFormulaNeverBlocks() {
+		let details = ["a": formula(installed: true, bottles: [])]
+		XCTAssertTrue(HomebrewPackageChecker.compileBlockers(roots: ["a"], details: details, arm64: false, macOSMajor: 26).blockers.isEmpty)
+	}
+	
+	func testOutdatedFormulaWithoutBottleBlocks() {
+		let details = ["a": formula(installed: true, outdated: true, bottles: [])]
+		XCTAssertEqual(HomebrewPackageChecker.compileBlockers(roots: ["a"], details: details, arm64: false, macOSMajor: 26).blockers, ["a"])
+	}
+	
+	func testBlockerFoundThroughTransitiveDependencyAndUnknownsReported() {
+		var details = ["a": formula(bottles: ["sonoma"], dependencies: ["b"])]
+		var result = HomebrewPackageChecker.compileBlockers(roots: ["a"], details: details, arm64: false, macOSMajor: 26)
+		XCTAssertTrue(result.blockers.isEmpty)
+		XCTAssertEqual(result.unknown, ["b"])
+		
+		details["b"] = formula(bottles: ["arm64_tahoe"])
+		result = HomebrewPackageChecker.compileBlockers(roots: ["a"], details: details, arm64: false, macOSMajor: 26)
+		XCTAssertEqual(result.blockers, ["b"])
+	}
+	
 }

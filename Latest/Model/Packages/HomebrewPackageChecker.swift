@@ -66,6 +66,65 @@ enum HomebrewPackageChecker {
 		}
 	}
 	
+	/// The formulae a cask declares with `depends_on formula:`, from `brew info --json=v2 --cask` output.
+	static func formulaDependencies(fromCaskInfoJSON output: String) -> [String] {
+		let casks = json(output)?["casks"] as? [[String: Any]]
+		let dependsOn = casks?.first?["depends_on"] as? [String: Any]
+		return (dependsOn?["formula"] as? [String]) ?? []
+	}
+	
+	/// The formulae that Homebrew would have to compile to install the given roots: those that are missing or outdated and have no usable bottle, looking through the dependencies of everything that would be installed.
+	///
+	/// `details` maps formula names to their `brew info --json=v2` entries. Names missing from it are returned by `unknown`, so the caller can fetch them and ask again.
+	static func compileBlockers(roots: [String], details: [String: [String: Any]], arm64: Bool, macOSMajor: Int) -> (blockers: [String], unknown: [String]) {
+		var blockers = [String](), unknown = [String](), seen = Set<String>()
+		var pending = roots
+		
+		while let name = pending.popLast() {
+			guard seen.insert(name).inserted else { continue }
+			guard let entry = details[name] else { unknown.append(name); continue }
+			
+			let isInstalled = !((entry["installed"] as? [[String: Any]]) ?? []).isEmpty
+			let isOutdated = (entry["outdated"] as? Bool) ?? false
+			// Up to date formulae are used as they are.
+			guard !isInstalled || isOutdated else { continue }
+			
+			let stable = (entry["bottle"] as? [String: Any])?["stable"] as? [String: Any]
+			let files = Set((stable?["files"] as? [String: Any])?.keys.map { $0 } ?? [])
+			if !HomebrewBottles.hasBottle(files: files, arm64: arm64, macOSMajor: macOSMajor) {
+				blockers.append(name)
+			}
+			pending.append(contentsOf: (entry["dependencies"] as? [String]) ?? [])
+		}
+		
+		return (blockers.sorted(), unknown.sorted())
+	}
+	
+	/// Formulae that installing or upgrading the cask would compile on this Mac. Empty if the cask needs no formulae or they all have bottles.
+	static func compileBlockers(forCask token: String, arm64: Bool = SystemInfo.isARM, macOSMajor: Int = ProcessInfo.processInfo.operatingSystemVersion.majorVersion) -> [String] {
+		guard let brew = HomebrewUpdateOperation.brewURL?.path else { return [] }
+		
+		let caskInfo = CommandRunner.run(brew, ["info", "--json=v2", "--cask", token], environment: environment)
+		let roots = formulaDependencies(fromCaskInfoJSON: caskInfo.output)
+		guard !roots.isEmpty else { return [] }
+		
+		var details = [String: [String: Any]]()
+		var requested = Set<String>()
+		var toFetch = roots
+		// Each round fetches the formulae found in the previous one.
+		while !toFetch.isEmpty {
+			requested.formUnion(toFetch)
+			let info = CommandRunner.run(brew, ["info", "--json=v2", "--formula"] + toFetch, environment: environment)
+			for entry in (json(info.output)?["formulae"] as? [[String: Any]]) ?? [] {
+				if let name = entry["name"] as? String { details[name] = entry }
+			}
+			let result = compileBlockers(roots: roots, details: details, arm64: arm64, macOSMajor: macOSMajor)
+			toFetch = result.unknown.filter { !requested.contains($0) }
+			if toFetch.isEmpty { return result.blockers }
+		}
+		return []
+	}
+	
 	/// The arguments for upgrading the given formulae from bottles.
 	static func upgradeArguments(for names: [String]) -> [String] {
 		["upgrade", "--formula", "--force-bottle"] + names

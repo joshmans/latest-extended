@@ -77,6 +77,14 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 			return
 		}
 		
+		// A cask can depend on formulae. Never let those be compiled from source.
+		let blockers = HomebrewPackageChecker.compileBlockers(forCask: caskToken)
+		if !blockers.isEmpty {
+			UpdateLog.write("[\(caskToken)] refused: would compile \(blockers.joined(separator: ", "))")
+			finish(with: LatestError.custom(title: "Update skipped: Homebrew would compile from source", description: "\(caskToken) needs \(blockers.joined(separator: ", ")), which has no prebuilt bottle for this Mac."))
+			return
+		}
+		
 		// Apps that were not installed through brew are installed over the existing bundle.
 		let isManaged = run(brew, ["list", "--cask", caskToken]).status == 0
 		let arguments = isManaged
