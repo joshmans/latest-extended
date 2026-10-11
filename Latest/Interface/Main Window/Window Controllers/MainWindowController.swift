@@ -18,9 +18,21 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
 		case latest = 0, file, edit, view, window, help
 	}
     
+	/// The split view holding the list and the release notes. The window's content wraps it to make room for the update log below.
+	private lazy var mainSplitViewController: NSSplitViewController? = contentViewController as? NSSplitViewController
+	
+	/// The panel below the main content showing the update log.
+	private var logItem: NSSplitViewItem?
+	
+	private static let showUpdateLogKey = "ShowUpdateLogKey"
+	private static let askedAboutUpdateLogKey = "AskedAboutUpdateLogKey"
+	
+	/// Waits for the first update to start, to offer the log once.
+	private var firstUpdateObserver: NSObjectProtocol?
+	
     /// The list view holding the apps
     lazy var listViewController : UpdateTableViewController = {
-		let splitViewController = self.contentViewController as? NSSplitViewController
+		let splitViewController = self.mainSplitViewController
         guard let firstItem = splitViewController?.splitViewItems[0], let controller = firstItem.viewController as? UpdateTableViewController else {
                 return UpdateTableViewController()
         }
@@ -33,7 +45,7 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
     
     /// The detail view controller holding the release notes
     lazy var releaseNotesViewController : ReleaseNotesViewController = {
-        guard let splitViewController = self.contentViewController as? NSSplitViewController,
+        guard let splitViewController = self.mainSplitViewController,
             let secondItem = splitViewController.splitViewItems[1].viewController as? ReleaseNotesViewController else {
                 return ReleaseNotesViewController()
         }
@@ -74,13 +86,90 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
         self.listViewController.checkForUpdates()
         self.listViewController.releaseNotesViewController = self.releaseNotesViewController
 
-        if let splitViewController = self.contentViewController as? NSSplitViewController {
+        if let splitViewController = self.mainSplitViewController {
 			splitViewController.splitView.autosaveName = "MainSplitView"
 			
             let detailItem = splitViewController.splitViewItems[1]
             detailItem.collapseBehavior = .preferResizingSplitViewWithFixedSiblings
         }
+		
+		installUpdateLog()
+		offerUpdateLogOnFirstUpdate()
     }
+	
+	
+	// MARK: - Update Log
+	
+	/// Puts the update log panel below the main content and adds its checkmark item to the View menu.
+	private func installUpdateLog() {
+		guard let window, let mainSplit = mainSplitViewController else { return }
+		let frame = window.frame
+		
+		let outer = NSSplitViewController()
+		outer.splitView.isVertical = false
+		outer.splitView.dividerStyle = .thin
+		outer.splitView.autosaveName = "MainLogSplit"
+		
+		let mainItem = NSSplitViewItem(viewController: mainSplit)
+		let logItem = NSSplitViewItem(viewController: UpdateLogViewController())
+		logItem.canCollapse = true
+		logItem.isCollapsed = !UserDefaults.standard.bool(forKey: Self.showUpdateLogKey)
+		logItem.minimumThickness = 90
+		outer.addSplitViewItem(mainItem)
+		outer.addSplitViewItem(logItem)
+		self.logItem = logItem
+		
+		window.contentViewController = outer
+		window.setFrame(frame, display: true)
+		
+		let item = NSMenuItem(title: "Show Update Log", action: #selector(toggleUpdateLog(_:)), keyEquivalent: "l")
+		item.keyEquivalentModifierMask = [.command, .shift]
+		item.target = self
+		if let viewMenu = NSApplication.shared.mainMenu?.item(at: MainMenuItem.view.rawValue)?.submenu {
+			viewMenu.insertItem(.separator(), at: 0)
+			viewMenu.insertItem(item, at: 0)
+		}
+	}
+	
+	/// The first time an update runs, asks whether the live log should be shown. The answer is final; the View menu item changes it later.
+	private func offerUpdateLogOnFirstUpdate() {
+		guard !UserDefaults.standard.bool(forKey: Self.askedAboutUpdateLogKey) else { return }
+		
+		firstUpdateObserver = NotificationCenter.default.addObserver(forName: UpdateLog.didAppend, object: nil, queue: .main) { [weak self] _ in
+			guard let self else { return }
+			if let observer = self.firstUpdateObserver { NotificationCenter.default.removeObserver(observer) }
+			self.firstUpdateObserver = nil
+			UserDefaults.standard.set(true, forKey: Self.askedAboutUpdateLogKey)
+			
+			// Not inside the notification: the update has already started and keeps running.
+			DispatchQueue.main.async {
+				guard let window = self.window else { return }
+				let alert = NSAlert()
+				alert.messageText = "Watch updates in the live log?"
+				alert.informativeText = "The log shows what Homebrew is doing while apps update, including errors. It appears at the bottom of this window and stays on until you turn it off."
+				alert.addButton(withTitle: "Show Live Log")
+				alert.addButton(withTitle: "Not Now")
+				alert.beginSheetModal(for: window) { response in
+					if response == .alertFirstButtonReturn {
+						if self.logItem?.isCollapsed == true { self.toggleUpdateLog(nil) }
+					} else {
+						let notice = NSAlert()
+						notice.messageText = "You can turn on the log any time"
+						notice.informativeText = "Choose View ▸ Show Update Log (⇧⌘L)."
+						notice.beginSheetModal(for: window)
+					}
+				}
+			}
+		}
+	}
+	
+	/// Shows or hides the update log panel.
+	@IBAction func toggleUpdateLog(_ sender: Any?) {
+		guard let logItem else { return }
+		let show = logItem.isCollapsed
+		logItem.animator().isCollapsed = !show
+		UserDefaults.standard.set(show, forKey: Self.showUpdateLogKey)
+	}
 
     
     // MARK: - Action Methods
@@ -155,6 +244,8 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
             guard let action = menuItem.action else { return }
             
             switch action {
+			case #selector(toggleUpdateLog(_:)):
+				menuItem.state = (logItem?.isCollapsed ?? true) ? .off : .on
 			case #selector(toggleShowInstalledUpdates(_:)):
                 menuItem.state = AppListSettings.shared.showInstalledUpdates ? .on : .off
 			case #selector(toggleShowIgnoredUpdates(_:)):
@@ -236,7 +327,7 @@ class MainWindowController: NSWindowController, NSMenuItemValidation, NSMenuDele
     // MARK: - Private Methods
     	
     private func showReleaseNotes(_ show: Bool, animated: Bool) {
-        guard let splitViewController = self.contentViewController as? NSSplitViewController else {
+        guard let splitViewController = self.mainSplitViewController else {
             return
         }
         
