@@ -64,7 +64,7 @@ enum PrivilegedHelper {
 		switch SMAppService.daemon(plistName: HelperConstants.daemonPlistName).status {
 		case .enabled: return .enabled
 		case .requiresApproval: return .requiresApproval
-		case .notFound: return .unavailable(reason: "The helper could not be found in the app.")
+		// `.notFound` is also what a valid daemon reports before it has ever been registered. Let the user try; `register()` reports the real error.
 		default: return .notRegistered
 		}
 	}
@@ -76,7 +76,14 @@ enum PrivilegedHelper {
 	static func enable() throws {
 		guard #available(macOS 13.0, *) else { return }
 		UserDefaults.standard.set(true, forKey: optInKey)
-		try SMAppService.daemon(plistName: HelperConstants.daemonPlistName).register()
+		let service = SMAppService.daemon(plistName: HelperConstants.daemonPlistName)
+		do {
+			try service.register()
+		} catch {
+			// When the user still has to approve the helper, `register()` throws "Operation not permitted" although registration worked. That is not a failure.
+			if service.status == .requiresApproval { return }
+			throw error
+		}
 	}
 	
 	static func disable() {
