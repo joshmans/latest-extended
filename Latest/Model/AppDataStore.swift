@@ -32,6 +32,9 @@ protocol AppProviding {
 	/// Sets the ignored state for the given app.
 	func setIgnoredState(_ ignored: Bool, for app: App)
 	
+	/// Returns the app with the given identifier, if it is known.
+	func app(withIdentifier identifier: App.Bundle.Identifier) -> App?
+	
 }
 
 /// The collection handling app bundles alongside there update representations.
@@ -97,6 +100,12 @@ class AppDataStore: AppProviding {
 	var hasAppStoreUpdates: Bool {
 		updateQueue.sync {
 			self.apps.contains { $0.updateAvailable && $0.source == .appStore && !$0.isIgnored }
+		}
+	}
+	
+	func app(withIdentifier identifier: App.Bundle.Identifier) -> App? {
+		updateQueue.sync {
+			self.apps.first { $0.identifier == identifier }
 		}
 	}
 	

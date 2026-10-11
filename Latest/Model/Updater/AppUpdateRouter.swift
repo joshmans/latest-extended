@@ -56,26 +56,41 @@ enum AppUpdateRouter {
 					enqueue(.homebrewUpgrade, app: app, caskToken: caskToken)
 				} else if let remembered = rememberedKind, let route = routes.first(where: { kind($0) == remembered }) {
 					enqueue(route, app: app, caskToken: caskToken)
-				} else if let route = ask(routes, appName: appName, caskToken: caskToken) {
-					enqueue(route, app: app, caskToken: caskToken)
+				} else {
+					switch ask(routes, appName: appName, caskToken: caskToken) {
+					case .route(let route)?:
+						enqueue(route, app: app, caskToken: caskToken)
+					case .ignore?:
+						UpdateLog.write("[\(caskToken)] ignored by the user")
+						if let known = UpdateCheckCoordinator.shared.appProvider.app(withIdentifier: app.identifier) {
+							UpdateCheckCoordinator.shared.appProvider.setIgnoredState(true, for: known)
+						}
+					case nil:
+						break
+					}
 				}
 			}
 		}
 	}
 	
-	private static func ask(_ routes: [AppUpdateRoute], appName: String, caskToken: String) -> AppUpdateRoute? {
+	private enum Choice {
+		case route(AppUpdateRoute)
+		case ignore
+	}
+	
+	private static func ask(_ routes: [AppUpdateRoute], appName: String, caskToken: String) -> Choice? {
 		let alert = NSAlert()
 		alert.messageText = "Update \(appName)?"
 		var details = "\(appName) was not installed with Homebrew, so Latest will not replace it silently."
-		var buttons = [(String, AppUpdateRoute?)]()
+		var buttons = [(String, Choice?)]()
 		for route in routes {
 			switch route {
 			case .homebrewInstall:
 				details += "\n\n• Homebrew: installs the \(caskToken) cask over your current copy. Homebrew manages the app from then on."
-				buttons.append(("Install with Homebrew", route))
+				buttons.append(("Install with Homebrew", .route(route)))
 			case .macPorts(let port):
 				details += "\n\n• MacPorts: installs the prebuilt port \(port) into /Applications/MacPorts. Your current copy stays as it is."
-				buttons.append(("Install with MacPorts", route))
+				buttons.append(("Install with MacPorts", .route(route)))
 			case .homebrewUpgrade:
 				break
 			}
@@ -84,6 +99,7 @@ enum AppUpdateRouter {
 			details += "\n\nMacPorts is first because it is installed and this is an Intel Mac, where Homebrew no longer builds binaries."
 		}
 		buttons.append(("Cancel", nil))
+		buttons.append(("Ignore This App", .ignore))
 		alert.informativeText = details
 		buttons.forEach { alert.addButton(withTitle: $0.0) }
 		alert.showsSuppressionButton = true
@@ -91,9 +107,9 @@ enum AppUpdateRouter {
 		
 		let response = alert.runModal()
 		let index = response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-		guard index >= 0, index < buttons.count, let route = buttons[index].1 else { return nil }
-		if alert.suppressionButton?.state == .on { rememberedKind = kind(route) }
-		return route
+		guard index >= 0, index < buttons.count, let choice = buttons[index].1 else { return nil }
+		if case .route(let route) = choice, alert.suppressionButton?.state == .on { rememberedKind = kind(route) }
+		return choice
 	}
 	
 	private static func enqueue(_ route: AppUpdateRoute, app: App.Bundle, caskToken: String) {
