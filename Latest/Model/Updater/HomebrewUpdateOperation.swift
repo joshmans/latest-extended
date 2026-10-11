@@ -40,6 +40,52 @@ enum UpdateLog {
 	
 }
 
+/// Lets brew's `sudo` ask for the administrator password with a macOS dialog.
+///
+/// Brew runs without a terminal, so installers that need `sudo` would otherwise fail with "a terminal is required". Brew adds `sudo -A` when `SUDO_ASKPASS` is set, which calls this script. The password goes from the dialog straight to sudo; it is never stored or logged.
+enum AskpassHelper {
+	
+	private static let script = """
+	#!/bin/bash
+	# Written by Latest. Shows a password dialog for sudo -A.
+	exec /usr/bin/osascript <<'APPLESCRIPT'
+	set reason to system attribute "LATEST_ASKPASS_REASON"
+	try
+		set answer to display dialog reason default answer "" with hidden answer with title "Latest" with icon caution buttons {"Cancel", "OK"} default button "OK"
+		return text returned of answer
+	on error
+		error number -128
+	end try
+	APPLESCRIPT
+	
+	"""
+	
+	/// The script's location, written on first use.
+	static var url: URL? {
+		let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Latest", isDirectory: true)
+		let url = directory.appendingPathComponent("askpass.sh")
+		let contents = script.split(separator: "\n", omittingEmptySubsequences: false).map { $0.hasPrefix("\t") ? String($0.dropFirst()) : String($0) }.joined(separator: "\n")
+		
+		if (try? String(contentsOf: url, encoding: .utf8)) != contents {
+			do {
+				try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+				try contents.write(to: url, atomically: true, encoding: .utf8)
+			} catch {
+				return nil
+			}
+		}
+		try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+		return url
+	}
+	
+	/// Environment that makes `sudo` use the dialog. Empty if the script could not be written.
+	static func environment(reason: String) -> [String: String] {
+		guard let url else { return [:] }
+		return ["SUDO_ASKPASS": url.path, "LATEST_ASKPASS_REASON": reason]
+	}
+	
+}
+
 /// The operation updating apps through Homebrew casks.
 ///
 /// Casks ship prebuilt app bundles, so this never compiles anything from source.
@@ -145,6 +191,7 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 		environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
 		environment["HOMEBREW_NO_INSTALL_CLEANUP"] = "1"
 		environment["NONINTERACTIVE"] = "1"
+		environment.merge(AskpassHelper.environment(reason: "Homebrew needs your administrator password to update \(caskToken).")) { $1 }
 		process.environment = environment
 		
 		let pipe = Pipe()
