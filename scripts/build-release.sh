@@ -31,7 +31,8 @@ echo "==> Building Latest (Release)"
 xcodebuild -project Latest.xcodeproj -scheme Latest -configuration Release -derivedDataPath build \
 	CODE_SIGNING_ALLOWED=NO clean build | tail -n 3
 
-rm -rf "$OUT" && mkdir -p "$OUT"
+# Only replace the app: dist/ may hold other things, such as backups of a previously installed copy.
+mkdir -p "$OUT" && rm -rf "$APP"
 ditto build/Build/Products/Release/Latest.app "$APP"
 
 # The team identifier decides who may talk to the helper.
