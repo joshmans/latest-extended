@@ -254,8 +254,12 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 	/// The running brew process, kept for cancellation.
 	private var process: Process?
 	
-	init(bundleIdentifier: String, appIdentifier: App.Bundle.Identifier, caskToken: String) {
+	/// Whether the cask replaces an app Homebrew does not manage yet. Only set after the user agreed to that.
+	private let adoptsApp: Bool
+	
+	init(bundleIdentifier: String, appIdentifier: App.Bundle.Identifier, caskToken: String, adoptsApp: Bool = false) {
 		self.caskToken = caskToken
+		self.adoptsApp = adoptsApp
 		super.init(bundleIdentifier: bundleIdentifier, appIdentifier: appIdentifier)
 	}
 	
@@ -288,8 +292,13 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 			return
 		}
 		
-		// Apps that were not installed through brew are installed over the existing bundle.
+		// Apps Homebrew does not manage are only touched when the user agreed to that (see AppUpdateRouter).
 		let isManaged = run(brew, ["list", "--cask", caskToken]).status == 0
+		if !isManaged && !adoptsApp {
+			UpdateLog.write("[\(caskToken)] refused: not managed by Homebrew")
+			finish(with: LatestError.custom(title: "Not managed by Homebrew", description: "\(caskToken) was not installed with Homebrew, so Latest will not replace it without asking."))
+			return
+		}
 		let arguments = isManaged
 			? ["upgrade", "--cask", "--greedy", caskToken]
 			: ["install", "--cask", "--force", caskToken]

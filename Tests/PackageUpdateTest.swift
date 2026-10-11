@@ -359,4 +359,24 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertEqual(result.blockers, ["b"])
 	}
 	
+	
+	// MARK: App update routing
+	
+	func testManagedCaskIsJustUpgraded() {
+		XCTAssertEqual(AppUpdateRouter.routes(isManaged: true, macPortsInstalled: true, isARM: false, macPortsPort: "x"), [.homebrewUpgrade])
+	}
+	
+	func testIntelWithMacPortsPrefersMacPortsForUnmanagedApps() {
+		XCTAssertEqual(AppUpdateRouter.routes(isManaged: false, macPortsInstalled: true, isARM: false, macPortsPort: "darktable"), [.macPorts(port: "darktable"), .homebrewInstall])
+	}
+	
+	func testAppleSiliconPrefersHomebrew() {
+		XCTAssertEqual(AppUpdateRouter.routes(isManaged: false, macPortsInstalled: true, isARM: true, macPortsPort: "darktable"), [.homebrewInstall, .macPorts(port: "darktable")])
+	}
+	
+	func testWithoutMacPortsOrPortOnlyHomebrewIsOffered() {
+		XCTAssertEqual(AppUpdateRouter.routes(isManaged: false, macPortsInstalled: false, isARM: false, macPortsPort: nil), [.homebrewInstall])
+		XCTAssertEqual(AppUpdateRouter.routes(isManaged: false, macPortsInstalled: true, isARM: false, macPortsPort: nil), [.homebrewInstall])
+	}
+	
 }

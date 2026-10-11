@@ -36,6 +36,7 @@
 		5039DE8522CA396F0088B39B /* UpdateQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5039DE8422CA396F0088B39B /* UpdateQueue.swift */; };
 		5039DE8722CA39C60088B39B /* UpdateOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5039DE8622CA39C60088B39B /* UpdateOperation.swift */; };
 		5039DE8B22CA39ED0088B39B /* StatefulOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5039DE8A22CA39ED0088B39B /* StatefulOperation.swift */; };
+		C410B2C3D4E5F60718293A4D /* AppUpdateRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C510B2C3D4E5F60718293A4D /* AppUpdateRouter.swift */; };
 		A1B2C3D4E5F60718293A4B5C /* HomebrewUpdateOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5D /* HomebrewUpdateOperation.swift */; };
 		5039DE8D22CAA2790088B39B /* MacAppStoreUpdateOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5039DE8C22CAA2790088B39B /* MacAppStoreUpdateOperation.swift */; };
 		5040D45C28DBB753009BF379 /* HomebrewCheckerOperation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5040D45A28DBB753009BF379 /* HomebrewCheckerOperation.swift */; };
@@ -196,6 +197,7 @@
 		5039DE8422CA396F0088B39B /* UpdateQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateQueue.swift; sourceTree = "<group>"; };
 		5039DE8622CA39C60088B39B /* UpdateOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateOperation.swift; sourceTree = "<group>"; };
 		5039DE8A22CA39ED0088B39B /* StatefulOperation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = StatefulOperation.swift; sourceTree = "<group>"; };
+		C510B2C3D4E5F60718293A4D /* AppUpdateRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateRouter.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5D /* HomebrewUpdateOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomebrewUpdateOperation.swift; sourceTree = "<group>"; };
 		5039DE8C22CAA2790088B39B /* MacAppStoreUpdateOperation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAppStoreUpdateOperation.swift; sourceTree = "<group>"; };
 		5040D45A28DBB753009BF379 /* HomebrewCheckerOperation.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = HomebrewCheckerOperation.swift; sourceTree = "<group>"; };
@@ -471,6 +473,7 @@
 				5039DE8622CA39C60088B39B /* UpdateOperation.swift */,
 				5087CD2C22F6E06B0013354C /* SparkleUpdateOperation.swift */,
 				A1B2C3D4E5F60718293A4B5D /* HomebrewUpdateOperation.swift */,
+				C510B2C3D4E5F60718293A4D /* AppUpdateRouter.swift */,
 				5039DE8C22CAA2790088B39B /* MacAppStoreUpdateOperation.swift */,
 			);
 			path = Updater;
@@ -1011,6 +1014,7 @@
 				50E4EB072B17DACB00A70A7D /* VersionParser.swift in Sources */,
 				50290E751E53EB6A00133E3D /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* HomebrewUpdateOperation.swift in Sources */,
+				C410B2C3D4E5F60718293A4D /* AppUpdateRouter.swift in Sources */,
 				C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */,
 				C800B2C3D4E5F60718293A4B /* HelperProtocol.swift in Sources */,
 				C810B2C3D4E5F60718293A4B /* PrivilegedHelper.swift in Sources */,
