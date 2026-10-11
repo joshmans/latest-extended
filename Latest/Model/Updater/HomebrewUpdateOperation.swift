@@ -305,6 +305,10 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 			finish()
 		} else if result.status != 0 {
 			finish(with: LatestError.custom(title: "Homebrew could not update this app", description: Self.failureSummary(result.output)))
+		} else if let skipped = result.output.components(separatedBy: .newlines).first(where: { $0.hasPrefix("Warning: Not upgrading") }) {
+			// Brew exits 0 when it skips a cask, but nothing was updated.
+			UpdateLog.write("[\(caskToken)] nothing updated: \(skipped)")
+			finish(with: LatestError.custom(title: "Homebrew did not update this app", description: skipped.replacingOccurrences(of: "Warning: ", with: "")))
 		} else {
 			finish()
 			Self.scheduleRescan()

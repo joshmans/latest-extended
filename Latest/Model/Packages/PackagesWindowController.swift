@@ -55,7 +55,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		case manager = "Manager", name = "Package", installed = "Installed", available = "Available", status = "Status", macPorts = "MacPorts equivalent"
 		var width: CGFloat {
 			switch self {
-			case .manager: return 80
+			case .manager: return 105
 			case .name: return 170
 			case .installed, .available: return 110
 			case .status: return 130
@@ -91,6 +91,11 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		table.allowsMultipleSelection = true
 		table.autosaveName = "PackageUpdatesTable"
 		table.autosaveTableColumns = true
+		// A saved narrower width would cut the Manager text next to its badge.
+		if let manager = table.tableColumn(withIdentifier: NSUserInterfaceItemIdentifier(Column.manager.rawValue)) {
+			manager.minWidth = 105
+			if manager.width < 105 { manager.width = 105 }
+		}
 		table.usesAlternatingRowBackgroundColors = true
 		table.dataSource = self
 		table.delegate = self
@@ -515,6 +520,13 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		}
 		
 		let label = NSTextField(labelWithString: text)
+		let font = label.font ?? .systemFont(ofSize: 13)
+		let color: NSColor = package.state.isPrebuilt || column == .macPorts && package.alternative != nil ? .labelColor : .secondaryLabelColor
+		if column == .manager {
+			label.attributedStringValue = SourceBadge.label(package.manager == .homebrew ? SourceBadge.homebrew : SourceBadge.macPorts, text, font: font, color: color)
+		} else if column == .macPorts, package.alternative != nil {
+			label.attributedStringValue = SourceBadge.label(SourceBadge.macPorts, text, font: font, color: color)
+		}
 		label.lineBreakMode = .byTruncatingTail
 		label.toolTip = tooltip ?? text
 		label.textColor = package.state.isPrebuilt || column == .macPorts && package.alternative != nil ? .labelColor : .secondaryLabelColor

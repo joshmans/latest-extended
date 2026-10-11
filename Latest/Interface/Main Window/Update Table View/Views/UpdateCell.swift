@@ -134,8 +134,9 @@ class UpdateCell: NSTableCellView {
 	private func updateTitle() {
 		let title = NSMutableAttributedString(attributedString: self.app?.highlightedName(for: self.filterQuery) ?? NSAttributedString())
 		
-		// Mark Mac App Store apps with the App Store icon after the name.
-		if self.app?.source == .appStore, let icon = App.Source.appStore.sourceIcon {
+		// Mark Mac App Store and Homebrew apps with the source's icon after the name.
+		let badged: [App.Source: String] = [.appStore: "Updated through the Mac App Store", .homebrew: "Updated through Homebrew"]
+		if let source = self.app?.source, badged[source] != nil, let icon = source.sourceIcon {
 			let size = (self.nameTextField.font?.pointSize ?? 13) + 1
 			let attachment = NSTextAttachment()
 			attachment.image = icon
@@ -145,6 +146,6 @@ class UpdateCell: NSTableCellView {
 		}
 		
 		self.nameTextField.attributedStringValue = title
-		self.nameTextField.toolTip = self.app?.source == .appStore ? "Updated through the Mac App Store" : nil
+		self.nameTextField.toolTip = self.app.flatMap { badged[$0.source] }
 	}
 }

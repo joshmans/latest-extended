@@ -8,10 +8,44 @@
 
 import AppKit
 
+/// Small badges identifying where an app or package comes from.
+enum SourceBadge {
+	
+	/// Homebrew's beer mug.
+	static let homebrew: NSImage = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+		let font = NSFont.systemFont(ofSize: 13)
+		let text = NSAttributedString(string: "🍺", attributes: [.font: font])
+		let size = text.size()
+		text.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
+		return true
+	}
+	
+	/// MacPorts: a deep blue rounded square with "MP", unlike the other two.
+	static let macPorts: NSImage = NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+		NSColor(calibratedRed: 0.10, green: 0.25, blue: 0.55, alpha: 1).setFill()
+		NSBezierPath(roundedRect: rect.insetBy(dx: 0.5, dy: 0.5), xRadius: 4, yRadius: 4).fill()
+		let text = NSAttributedString(string: "MP", attributes: [.font: NSFont.systemFont(ofSize: 8.5, weight: .heavy), .foregroundColor: NSColor.white])
+		let size = text.size()
+		text.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
+		return true
+	}
+	
+	/// The image followed by the text, for table cells.
+	static func label(_ image: NSImage, _ text: String, font: NSFont, color: NSColor) -> NSAttributedString {
+		let attachment = NSTextAttachment()
+		attachment.image = image
+		attachment.bounds = CGRect(x: 0, y: -3, width: 14, height: 14)
+		let result = NSMutableAttributedString(attachment: attachment)
+		result.append(NSAttributedString(string: " " + text, attributes: [.font: font, .foregroundColor: color]))
+		return result
+	}
+	
+}
+
 extension App {
 	
 	/// The source of update information.
-	enum Source: String, Equatable {
+	enum Source: String, Hashable {
 		/// No known source had information about this app. It is unsupported by the update checker.
 		case none
 		
@@ -41,7 +75,7 @@ extension App {
 			case .appStore:
 				return Self.appStoreIcon
 			case .homebrew:
-				return NSImage(named: "brew")
+				return SourceBadge.homebrew
 			}
 		}
 		
