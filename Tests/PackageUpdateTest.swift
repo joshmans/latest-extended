@@ -175,7 +175,7 @@ final class PackageUpdateTest: XCTestCase {
 	
 	func testSwitchRefusesOversizedGroups() {
 		let reverse = ["aom": (0..<30).map { "dep\($0)" }]
-		let plan = PackageSwitch.plan(selected: [brew("aom", alternative: "aom")], reverseDependencies: reverse, alternative: { $0 })
+		let plan = PackageSwitch.plan(selected: [brew("aom", alternative: "aom")], reverseDependencies: reverse, alternative: { $0 }, maximumGroupSize: 25)
 		XCTAssertTrue(plan.groups.isEmpty)
 		XCTAssertTrue(plan.blocked.first?.reason.contains("limit") ?? false)
 	}
@@ -279,5 +279,43 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertEqual(PackageVersions.relation(of: "1.10.0", to: "1.9.0"), .newer, "Numbers compare numerically")
 		XCTAssertEqual(PackageVersions.relation(of: "2026.08.19_0+ffmpeg", to: "2026.8.19"), .same)
 		XCTAssertEqual(PackageVersions.base("1.25.0_1+gnutls"), "1.25.0")
+	}
+	
+	func testLargeChainsWithinTheLimitAreSwitched() {
+		let reverse = ["xz": (0..<87).map { "dep\($0)" }]
+		let plan = PackageSwitch.plan(selected: [brew("xz", alternative: "xz")], reverseDependencies: reverse, alternative: { $0 })
+		XCTAssertEqual(plan.groups.first?.formulae.count, 88)
+		XCTAssertEqual(plan.groups.first?.formulae.last, "xz", "The selected formula is removed last")
+	}
+	
+	func testOneUnswitchablePackageDoesNotBlockTheOthers() {
+		let reverse = ["bad": ["blocker"], "good": ["leaf"]]
+		let plan = PackageSwitch.plan(selected: [brew("bad", alternative: "bad"), brew("good", alternative: "good")], reverseDependencies: reverse, alternative: { $0 == "blocker" ? nil : $0 })
+		XCTAssertEqual(plan.groups.count, 1)
+		XCTAssertEqual(Set(plan.groups[0].formulae), ["good", "leaf"])
+		XCTAssertEqual(plan.blocked.map(\.package), ["bad"])
+		XCTAssertTrue(plan.blocked[0].reason.contains("blocker"))
+	}
+	
+	func testSharedDependentsOfSwitchablePackagesFormOneGroupEvenWhenAnotherPackageIsBlocked() {
+		let reverse = ["a": ["shared"], "b": ["shared"], "c": ["nope"]]
+		let plan = PackageSwitch.plan(selected: [brew("a", alternative: "a"), brew("b", alternative: "b"), brew("c", alternative: "c")], reverseDependencies: reverse, alternative: { $0 == "nope" ? nil : $0 })
+		XCTAssertEqual(plan.groups.count, 1)
+		XCTAssertEqual(Set(plan.groups[0].formulae), ["a", "b", "shared"])
+		XCTAssertEqual(plan.blocked.map(\.package), ["c"])
+	}
+	
+	func testMergedChainsOverTheLimitAreBlockedTogether() {
+		let reverse = ["a": (0..<20).map { "x\($0)" }, "b": (10..<30).map { "x\($0)" }]
+		let plan = PackageSwitch.plan(selected: [brew("a", alternative: "a"), brew("b", alternative: "b")], reverseDependencies: reverse, alternative: { $0 }, maximumGroupSize: 25)
+		XCTAssertTrue(plan.groups.isEmpty)
+		XCTAssertEqual(Set(plan.blocked.map(\.package)), ["a", "b"])
+	}
+	
+	func testLooksUpEachEquivalentOnlyOnce() {
+		var lookups = [String: Int]()
+		let reverse = ["a": ["shared"], "b": ["shared"]]
+		_ = PackageSwitch.plan(selected: [brew("a", alternative: "a"), brew("b", alternative: "b")], reverseDependencies: reverse, alternative: { lookups[$0, default: 0] += 1; return $0 })
+		XCTAssertTrue(lookups.values.allSatisfy { $0 == 1 }, "\(lookups)")
 	}
 }

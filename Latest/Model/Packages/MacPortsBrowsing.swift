@@ -88,36 +88,58 @@ enum PackageSwitch {
 		var blocked = [(package: String, reason: String)]()
 	}
 	
-	/// The largest group that will be switched in one go.
-	static let maximumGroupSize = 25
+	/// The largest group that will be switched in one go. A group is installed with prebuilt archives only and removed from Homebrew only after every port in it is confirmed installed, so size is about time and review effort, not about safety.
+	static let maximumGroupSize = 150
+	
+	/// Every installed formula that depends on `name`, directly or indirectly, including `name` itself.
+	static func closure(of name: String, reverseDependencies: [String: [String]]) -> Set<String> {
+		var closure: Set<String> = [name]
+		var queue = [name]
+		while let current = queue.popLast() {
+			for dependent in reverseDependencies[current] ?? [] where closure.insert(dependent).inserted {
+				queue.append(dependent)
+			}
+		}
+		return closure
+	}
 	
 	/// - Parameters:
 	///   - selected: The Homebrew packages the user chose.
 	///   - reverseDependencies: For each formula, the installed formulae that depend on it.
 	///   - alternative: The prebuilt MacPorts port replacing a formula, if any.
+	///
+	/// Each selected package is judged on its own chain of dependents first, so one package that cannot be switched does not block the others. Chains that overlap and can all be switched are merged into one group, because they have to move together.
 	static func plan(selected: [PackageUpdate], reverseDependencies: [String: [String]], alternative: (String) -> String?, maximumGroupSize: Int = PackageSwitch.maximumGroupSize) -> Plan {
 		var plan = Plan()
 		let selectedNames = selected.filter { $0.manager == .homebrew }.map(\.name)
 		
-		// Everything that has to move together with each selected formula.
-		var closures = [Set<String>]()
-		for name in selectedNames {
-			var closure: Set<String> = [name]
-			var queue = [name]
-			while let current = queue.popLast() {
-				for dependent in reverseDependencies[current] ?? [] where closure.insert(dependent).inserted {
-					queue.append(dependent)
-				}
-			}
-			closures.append(closure)
+		// Looked up at most once per formula.
+		var cache = [String: String?]()
+		func port(for formula: String) -> String? {
+			if let cached = cache[formula] { return cached }
+			let found = alternative(formula).flatMap { MacPortsParser.isValidPortName($0) ? $0 : nil }
+			cache[formula] = .some(found)
+			return found
 		}
 		
-		// Merge closures that overlap, since removing one needs the other gone as well.
+		// Judge each selected package's own chain.
+		var viable = [(members: Set<String>, selected: [String])]()
+		for name in selectedNames {
+			let members = closure(of: name, reverseDependencies: reverseDependencies)
+			if members.count > maximumGroupSize {
+				plan.blocked.append((name, "It would pull in \(members.count) packages (limit \(maximumGroupSize))"))
+			} else if let missing = ([name] + members.subtracting([name]).sorted()).first(where: { port(for: $0) == nil }) {
+				plan.blocked.append((name, missing == name ? "No prebuilt MacPorts equivalent" : "\(missing) depends on it and has no prebuilt MacPorts equivalent"))
+			} else {
+				viable.append((members, [name]))
+			}
+		}
+		
+		// Merge chains that overlap, since removing one needs the other gone as well.
 		var merged = [(members: Set<String>, selected: [String])]()
-		for (index, closure) in closures.enumerated() {
-			let overlapping = merged.indices.filter { !merged[$0].members.isDisjoint(with: closure) }
-			var group = (members: closure, selected: [selectedNames[index]])
-			for position in overlapping.reversed() {
+		for chain in viable {
+			var group = chain
+			for position in merged.indices.reversed() where !merged[position].members.isDisjoint(with: group.members) {
 				group.members.formUnion(merged[position].members)
 				group.selected += merged[position].selected
 				merged.remove(at: position)
@@ -126,26 +148,11 @@ enum PackageSwitch {
 		}
 		
 		for entry in merged {
-			let names = entry.selected.sorted().joined(separator: ", ")
-			if entry.members.count > maximumGroupSize {
-				for name in entry.selected { plan.blocked.append((name, "It would pull in \(entry.members.count) packages (limit \(maximumGroupSize))")) }
+			guard entry.members.count <= maximumGroupSize else {
+				for name in entry.selected { plan.blocked.append((name, "Together with the other selected packages it would pull in \(entry.members.count) packages (limit \(maximumGroupSize)). Select fewer at once.")) }
 				continue
 			}
-			
-			var ports = [String: String]()
-			var missing: String?
-			for member in entry.members.sorted() {
-				if let port = alternative(member), MacPortsParser.isValidPortName(port) { ports[member] = port } else { missing = member; break }
-			}
-			if let missing {
-				let reason = entry.selected.contains(missing)
-					? "No prebuilt MacPorts equivalent"
-					: "\(missing) depends on it and has no prebuilt MacPorts equivalent"
-				for name in entry.selected { plan.blocked.append((name, reason)) }
-				_ = names
-				continue
-			}
-			
+			let ports = Dictionary(uniqueKeysWithValues: entry.members.compactMap { member in port(for: member).map { (member, $0) } })
 			plan.groups.append(Group(formulae: uninstallOrder(entry.members, reverseDependencies), ports: ports, pulledIn: entry.members.subtracting(entry.selected).sorted()))
 		}
 		return plan

@@ -169,11 +169,22 @@ enum MacPortsPackageChecker {
 	
 	/// The ports whose local index version differs from the prebuilt archive on the server. Installing those with `-b` would fail until the index is refreshed.
 	static func portsWithOutdatedIndex(_ archiveVersions: [String: String]) -> [String] {
-		archiveVersions.compactMap { port, archive in
+		let entries = archiveVersions.sorted { $0.key < $1.key }
+		var outdated = [String]()
+		let lock = NSLock()
+		DispatchQueue.concurrentPerform(iterations: entries.count) { index in
+			let (port, archive) = entries[index]
 			let info = MacPortsParser.parseInfo(CommandRunner.run(portPath, ["info", "--index", "--version", "--revision", port]).output)
-			guard let version = info["version"], let revision = info["revision"] else { return nil }
-			return MacPortsParser.archiveMatchesIndex(archiveVersion: archive, indexVersion: version, indexRevision: revision) ? nil : port
-		}.sorted()
+			guard let version = info["version"], let revision = info["revision"],
+				  !MacPortsParser.archiveMatchesIndex(archiveVersion: archive, indexVersion: version, indexRevision: revision) else { return }
+			lock.lock(); outdated.append(port); lock.unlock()
+		}
+		return outdated.sorted()
+	}
+	
+	/// The names of all ports that are installed and active, from a single `port installed` call.
+	static func activePorts() -> Set<String> {
+		Set(MacPortsParser.parseInstalled(CommandRunner.run(portPath, ["installed"]).output).filter(\.isActive).map(\.name))
 	}
 	
 	/// Whether the port is currently installed and active.

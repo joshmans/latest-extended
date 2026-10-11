@@ -288,18 +288,28 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		DispatchQueue.global().async {
 			let reverse = HomebrewPackageChecker.reverseDependencies()
 			var known = Dictionary(uniqueKeysWithValues: selected.compactMap { package in package.alternative.map { (package.name, Optional($0)) } })
-			let plan = PackageSwitch.plan(selected: selected, reverseDependencies: reverse) { formula in
-				if let cached = known[formula] { return cached?.name }
-				let alternative = MacPortsPackageChecker.equivalent(forHomebrewFormula: formula)
-				known[formula] = .some(alternative)
-				return alternative?.name
+			
+			// Look up the MacPorts equivalents of everything that would move, in parallel. Chains that are too large are blocked anyway, so they are skipped.
+			let wanted = selected.reduce(into: Set<String>()) { result, package in
+				let chain = PackageSwitch.closure(of: package.name, reverseDependencies: reverse)
+				if chain.count <= PackageSwitch.maximumGroupSize { result.formUnion(chain) }
+			}.subtracting(known.keys).sorted()
+			if !wanted.isEmpty {
+				DispatchQueue.main.async { self.statusLabel.stringValue = "Looking up MacPorts equivalents for \(wanted.count) package(s)…" }
+				let lock = NSLock()
+				DispatchQueue.concurrentPerform(iterations: wanted.count) { index in
+					let alternative = MacPortsPackageChecker.equivalent(forHomebrewFormula: wanted[index])
+					lock.lock(); known[wanted[index]] = .some(alternative); lock.unlock()
+				}
 			}
 			
+			let plan = PackageSwitch.plan(selected: selected, reverseDependencies: reverse) { known[$0]??.name }
+			
 			// Prebuilt archives are published for the newest port versions. A stale local index asks for versions that no longer exist.
-			var archiveVersions = [String: String]()
-			for alternative in known.values.compactMap({ $0 }) { archiveVersions[alternative.name] = alternative.version }
 			let planned = Set(plan.groups.flatMap { $0.ports.values })
-			let outdatedIndex = MacPortsPackageChecker.portsWithOutdatedIndex(archiveVersions.filter { planned.contains($0.key) })
+			var archiveVersions = [String: String]()
+			for alternative in known.values.compactMap({ $0 }) where planned.contains(alternative.name) { archiveVersions[alternative.name] = alternative.version }
+			let outdatedIndex = MacPortsPackageChecker.portsWithOutdatedIndex(archiveVersions)
 			
 			let alternativeVersions = known.compactMapValues { $0?.version }
 			let installedVersions = Dictionary(uniqueKeysWithValues: selected.map { ($0.name, $0.installedVersion) })
@@ -313,11 +323,10 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 					return
 				}
 				
-				let alert = NSAlert()
-				alert.messageText = "Switch \(plan.groups.reduce(0) { $0 + $1.formulae.count }) package(s) to MacPorts?"
-				var text = "Every prebuilt MacPorts port is installed first. Homebrew formulae are only uninstalled after all ports of their group are confirmed installed, dependents first.\n"
+				let total = plan.groups.reduce(0) { $0 + $1.formulae.count }
+				var details = ""
 				for group in plan.groups {
-					text += "\n" + group.formulae.map { formula -> String in
+					details += group.formulae.map { formula -> String in
 						var line = "• \(formula) → port \(group.ports[formula] ?? "?")"
 						if let version = alternativeVersions[formula] {
 							line += " \(PackageVersions.base(version))"
@@ -326,14 +335,19 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 							}
 						}
 						return line + (group.pulledIn.contains(formula) ? "  (depends on your selection)" : "")
-					}.joined(separator: "\n") + "\n"
+					}.joined(separator: "\n") + "\n\n"
 				}
-				if !blocked.isEmpty { text += "\nKept in Homebrew:\n" + blocked.joined(separator: "\n") + "\n" }
+				if !blocked.isEmpty { details += "Kept in Homebrew:\n" + blocked.joined(separator: "\n") + "\n\n" }
+				
+				var summary = "Every prebuilt MacPorts port is installed first. Homebrew formulae are only uninstalled after all ports of their group are confirmed installed, dependents first. MacPorts versions can be older than Homebrew's, and /opt/local/bin should come before /usr/local/bin on your PATH."
 				if !outdatedIndex.isEmpty {
-					text += "\nYour MacPorts index is out of date for \(outdatedIndex.joined(separator: ", ")), so those prebuilt archives would not be found. The index will be refreshed first (port selfupdate), which asks for your administrator password.\n"
+					summary += "\n\nYour MacPorts index is out of date for \(outdatedIndex.count) port(s), so their prebuilt archives would not be found. It is refreshed first (port selfupdate) in the same step."
 				}
-				text += "\nMacPorts versions can be older than Homebrew's. Make sure /opt/local/bin is on your PATH before /usr/local/bin."
-				alert.informativeText = text
+				
+				let alert = NSAlert()
+				alert.messageText = "Switch \(total) package(s) to MacPorts?"
+				alert.informativeText = summary
+				alert.accessoryView = Self.scrollableText(details)
 				alert.addButton(withTitle: "Switch")
 				alert.addButton(withTitle: "Cancel")
 				guard alert.runModal() == .alertFirstButtonReturn else {
@@ -343,22 +357,26 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				}
 				
 				blocked.forEach(self.append)
-				self.statusLabel.stringValue = "Installing MacPorts equivalents…"
+				self.statusLabel.stringValue = "Installing \(planned.count) MacPorts package(s)…"
 				DispatchQueue.global().async {
-					let ports = Array(Set(plan.groups.flatMap { $0.ports.values })).sorted()
 					var outputs = [String]()
-					// Refreshing a stale index and installing share one administrator prompt.
+					
+					// Refreshing a stale index and installing share one administrator prompt. Installs are split into chunks to keep each command short.
 					var actions = [PortAction]()
 					if !outdatedIndex.isEmpty { actions.append(.selfUpdate) }
-					actions.append(.install(ports: ports, variants: [], binaryOnly: true))
+					for chunk in planned.sorted().chunked(into: 100) {
+						actions.append(.install(ports: chunk, variants: [], binaryOnly: true))
+					}
 					let results = MacPortsPackageChecker.runBatch(actions)
 					for (action, result) in zip(actions, results) {
 						let title = (["port"] + (action.arguments ?? [])).joined(separator: " ")
-						outputs.append("\(title): exit \(result.status)\n" + result.output.suffix(1500))
+						outputs.append("\(title.prefix(160)): exit \(result.status)\n" + result.output.suffix(1500))
 					}
 					
+					// One call tells which ports ended up installed.
+					let active = MacPortsPackageChecker.activePorts()
 					for group in plan.groups {
-						let missing = group.ports.values.filter { !MacPortsPackageChecker.isActive($0) }
+						let missing = group.ports.values.filter { !active.contains($0) }
 						guard missing.isEmpty else {
 							outputs.append("Kept \(group.formulae.joined(separator: ", ")) in Homebrew: MacPorts did not install \(missing.sorted().joined(separator: ", ")).")
 							continue
@@ -368,6 +386,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 								outputs.append("\(formula): already removed from Homebrew.")
 								continue
 							}
+							DispatchQueue.main.async { self.statusLabel.stringValue = "Removing \(formula) from Homebrew…" }
 							let removal = HomebrewPackageChecker.uninstall(formula)
 							outputs.append("brew uninstall \(formula): exit \(removal.status)\n" + removal.output.suffix(600))
 							if removal.status != 0 {
@@ -385,6 +404,20 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				}
 			}
 		}
+	}
+	
+	/// A scrollable, selectable text area for long lists in alerts.
+	private static func scrollableText(_ text: String) -> NSView {
+		let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 520, height: 240))
+		scroll.hasVerticalScroller = true
+		scroll.borderType = .bezelBorder
+		let textView = NSTextView(frame: scroll.bounds)
+		textView.isEditable = false
+		textView.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
+		textView.string = text.trimmingCharacters(in: .whitespacesAndNewlines)
+		textView.autoresizingMask = [.width]
+		scroll.documentView = textView
+		return scroll
 	}
 	
 	@objc private func updateSelected() {
@@ -529,6 +562,16 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	
 	func tableViewSelectionDidChange(_ notification: Notification) {
 		refreshControls()
+	}
+	
+}
+
+private extension Array {
+	
+	/// Splits the array into consecutive pieces of at most `size` elements.
+	func chunked(into size: Int) -> [[Element]] {
+		guard size > 0 else { return [self] }
+		return stride(from: 0, to: count, by: size).map { Array(self[$0..<Swift.min($0 + size, count)]) }
 	}
 	
 }
