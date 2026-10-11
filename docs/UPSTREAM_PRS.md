@@ -1,6 +1,6 @@
 # Upstream pull requests (drafts)
 
-Three small, independent changes prepared against [mangerlahn/Latest](https://github.com/mangerlahn/Latest) `main` (1301cf6). The fork `joshmans/Latest` exists with these three branches, and a comment offering each of the two feature changes was posted on issues #288 and #297 (2026-10-10). No pull request has been opened yet. Each branch is based directly on upstream's `main`, builds on its own, and merges with the other two without conflicts.
+Three small, independent changes prepared against [mangerlahn/Latest](https://github.com/mangerlahn/Latest) `main` (1301cf6). The fork `joshmans/Latest` exists with these three branches, and a comment offering each of the two feature changes was posted on issues #288 and #297 (2026-10-10). Pull requests opened 2026-10-11: [#605](https://github.com/mangerlahn/Latest/pull/605) (crash fix), [#606](https://github.com/mangerlahn/Latest/pull/606) (cask matching), [#607](https://github.com/mangerlahn/Latest/pull/607) (in-app update). Each branch is based directly on upstream's `main`, builds on its own, and merges with the other two without conflicts.
 
 | Branch | Upstream issue | Tests added |
 |---|---|---|
