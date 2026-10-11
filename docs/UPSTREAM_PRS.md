@@ -8,6 +8,8 @@ Three small, independent changes prepared against [mangerlahn/Latest](https://gi
 | `pr/homebrew-cask-bundle-id-matching` | [#297](https://github.com/mangerlahn/Latest/issues/297) | 4 |
 | `pr/homebrew-in-app-update` | [#288](https://github.com/mangerlahn/Latest/issues/288) | 4 |
 
+A fourth branch, `pr/source-badges`, is prepared but **not opened** (no issue exists for it, and the README asks for an issue first): it marks App Store and Homebrew apps in the update list with their source's icon (the App Store app's own icon, and a drawn Homebrew beer mug), with the source name as tooltip. Sparkle stays unmarked. `Source.sourceIcon` already referred to "appstore" and "brew" images that are not in the asset catalog; they are still looked up first, so artwork can replace the fallbacks. 3 tests. All four branches merge together cleanly (38 tests, the one known failure).
+
 Test status on upstream's code: 25 tests before, all new tests pass; `VersionParserTest.testEmptyVersionParsing` fails on upstream `main` already (open upstream PR #596 addresses it). The test target only builds with the private-framework search paths passed on the command line (open upstream PR #595 addresses that); see this fork's README for the command.
 
 The changes were written with Claude's help; say so in the PRs.
@@ -42,3 +44,7 @@ See the commit message. Relates to #297. Tests cover: a renamed app matched by b
 
 ### Update Homebrew-managed apps from within Latest
 See the commit message. Addresses #288. The new operation has not been run against a real cask update by an automated test; the tests cover detecting managed casks and validating tokens and arguments. Decision for the maintainer: it keeps `Source.supportState` for `.homebrew` as `.limited`, since not every Homebrew-matched app can be updated this way.
+
+
+### Mark App Store and Homebrew apps in the update list (not opened yet)
+Apps whose update information comes from the Mac App Store or Homebrew get that source's icon after their name in the list, with the source name as tooltip. Sparkle apps stay unmarked since they are the common case. `Source.sourceIcon` already referred to `appstore` and `brew` images that are not in the asset catalog; those are still looked up first, so you can drop in artwork. Until then the App Store app's own icon and a drawn Homebrew badge are used. Decision for the maintainer: whether Sparkle should be marked too, and whether to ship real artwork. Written with Claude's help.
