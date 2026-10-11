@@ -61,7 +61,10 @@ enum PortPrivileges {
 	
 	/// The runner to use right now.
 	static var runner: PrivilegedPortRunner {
-		PromptingPortRunner()
+		if PrivilegedHelper.isOptedIn, PrivilegedHelper.status == .enabled {
+			return HelperPortRunner()
+		}
+		return PromptingPortRunner()
 	}
 	
 }

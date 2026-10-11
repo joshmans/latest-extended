@@ -18,6 +18,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	private lazy var refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refresh))
 	private lazy var indexButton = NSButton(title: "Update Package Indexes…", target: self, action: #selector(updateIndexes))
 	private lazy var updateButton = NSButton(title: "Update Selected", target: self, action: #selector(updateSelected))
+	private lazy var privilegesButton = NSButton(title: "", target: self, action: #selector(configurePrivileges))
 	private lazy var switchButton = NSButton(title: "Switch to MacPorts…", target: self, action: #selector(switchToMacPorts))
 	private var isBusy = false { didSet { refreshControls() } }
 	
@@ -74,7 +75,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		spinner.isDisplayedWhenStopped = false
 		statusLabel.lineBreakMode = .byTruncatingTail
 		
-		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), indexButton, refreshButton, switchButton, updateButton])
+		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), privilegesButton, indexButton, refreshButton, switchButton, updateButton])
 		buttons.orientation = .horizontal
 		
 		let stack = NSStackView(views: [buttons, tableScroll, logScroll])
@@ -97,7 +98,63 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		refreshControls()
 	}
 	
+	/// Title and tooltip of the button controlling password-free MacPorts changes.
+	private func refreshPrivilegesButton() {
+		switch PrivilegedHelper.status {
+		case .unavailable(let reason):
+			privilegesButton.title = "Password prompt: always"
+			privilegesButton.toolTip = "Password-free MacPorts changes are unavailable. \(reason)"
+			privilegesButton.isEnabled = false
+		case .notRegistered:
+			privilegesButton.title = "Enable password-free…"
+			privilegesButton.toolTip = "Install a helper so MacPorts changes do not ask for your password each time."
+			privilegesButton.isEnabled = true
+		case .requiresApproval:
+			privilegesButton.title = "Approve helper in Settings…"
+			privilegesButton.toolTip = "Allow Latest in System Settings > General > Login Items & Extensions."
+			privilegesButton.isEnabled = true
+		case .enabled:
+			privilegesButton.title = PrivilegedHelper.isOptedIn ? "Password-free: on" : "Enable password-free…"
+			privilegesButton.toolTip = "MacPorts changes run through the helper without a password prompt. Click to turn off."
+			privilegesButton.isEnabled = true
+		}
+	}
+	
+	@objc private func configurePrivileges() {
+		switch PrivilegedHelper.status {
+		case .unavailable:
+			return
+			
+		case .requiresApproval:
+			PrivilegedHelper.openSystemSettings()
+			
+		case .enabled where PrivilegedHelper.isOptedIn:
+			let alert = NSAlert()
+			alert.messageText = "Turn off password-free MacPorts changes?"
+			alert.informativeText = "The helper is removed. MacPorts changes will ask for your administrator password again."
+			alert.addButton(withTitle: "Turn Off")
+			alert.addButton(withTitle: "Cancel")
+			if alert.runModal() == .alertFirstButtonReturn { PrivilegedHelper.disable() }
+			
+		default:
+			let alert = NSAlert()
+			alert.messageText = "Enable password-free MacPorts changes?"
+			alert.informativeText = "This installs a small helper that runs as an administrator. It can only run a fixed set of MacPorts commands (install, upgrade, uninstall and selfupdate, with validated names) and only accepts requests from this app. macOS asks you to approve it once in System Settings."
+			alert.addButton(withTitle: "Enable")
+			alert.addButton(withTitle: "Cancel")
+			guard alert.runModal() == .alertFirstButtonReturn else { return }
+			do {
+				try PrivilegedHelper.enable()
+				if PrivilegedHelper.status == .requiresApproval { PrivilegedHelper.openSystemSettings() }
+			} catch {
+				append("Could not enable the helper: \(error.localizedDescription)")
+			}
+		}
+		refreshPrivilegesButton()
+	}
+	
 	private func refreshControls() {
+		refreshPrivilegesButton()
 		refreshButton.isEnabled = !isBusy
 		indexButton.isEnabled = !isBusy
 		updateButton.isEnabled = !isBusy && !selectedUpdatablePackages.isEmpty

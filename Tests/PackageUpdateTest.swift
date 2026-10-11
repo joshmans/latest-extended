@@ -251,4 +251,22 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertEqual(results.count, 2)
 		XCTAssertTrue(results.allSatisfy { $0.status != 0 })
 	}
+	
+	// MARK: Helper
+	
+	func testHelperRequirementNeedsATeamIdentifier() {
+		XCTAssertNil(HelperConstants.requirement(identifier: "com.max-langer.Latest", teamIdentifier: nil))
+		XCTAssertNil(HelperConstants.requirement(identifier: "com.max-langer.Latest", teamIdentifier: ""))
+		XCTAssertNil(HelperConstants.requirement(identifier: "com.max-langer.Latest", teamIdentifier: "abc\" or anchor apple"), "A team identifier must not be able to inject requirement syntax")
+		XCTAssertEqual(HelperConstants.requirement(identifier: "com.max-langer.Latest", teamIdentifier: "ABCDE12345"),
+					   "anchor apple generic and identifier \"com.max-langer.Latest\" and certificate leaf[subject.OU] = \"ABCDE12345\"")
+	}
+	
+	func testHelperIsUnavailableInUnsignedBuilds() {
+		guard case .unavailable = PrivilegedHelper.status else { return XCTFail("The test host has no embedded helper") }
+	}
+	
+	func testRunnerFallsBackToPromptWithoutHelper() {
+		XCTAssertTrue(PortPrivileges.runner is PromptingPortRunner)
+	}
 }

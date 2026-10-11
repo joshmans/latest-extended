@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C800B2C3D4E5F60718293A4B /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = C900B2C3D4E5F60718293A4B /* HelperProtocol.swift */; };
+		C810B2C3D4E5F60718293A4B /* PrivilegedHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C910B2C3D4E5F60718293A4B /* PrivilegedHelper.swift */; };
 		C600B2C3D4E5F60718293A4B /* PortAction.swift in Sources */ = {isa = PBXBuildFile; fileRef = C700B2C3D4E5F60718293A4B /* PortAction.swift */; };
 		C610B2C3D4E5F60718293A4B /* PrivilegedPort.swift in Sources */ = {isa = PBXBuildFile; fileRef = C710B2C3D4E5F60718293A4B /* PrivilegedPort.swift */; };
 		D1B2C3D4E5F60718293A4B5C /* AppStoreLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1B2C3D4E5F60718293A4B5D /* AppStoreLinks.swift */; };
@@ -107,6 +109,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C900B2C3D4E5F60718293A4B /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
+		C910B2C3D4E5F60718293A4B /* PrivilegedHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedHelper.swift; sourceTree = "<group>"; };
 		C700B2C3D4E5F60718293A4B /* PortAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortAction.swift; sourceTree = "<group>"; };
 		C710B2C3D4E5F60718293A4B /* PrivilegedPort.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedPort.swift; sourceTree = "<group>"; };
 		D1B2C3D4E5F60718293A4B5D /* AppStoreLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreLinks.swift; sourceTree = "<group>"; };
@@ -387,6 +391,8 @@
 		C3000000000000000000AAAA /* Packages */ = {
 			isa = PBXGroup;
 			children = (
+				C900B2C3D4E5F60718293A4B /* HelperProtocol.swift */,
+				C910B2C3D4E5F60718293A4B /* PrivilegedHelper.swift */,
 				C700B2C3D4E5F60718293A4B /* PortAction.swift */,
 				C710B2C3D4E5F60718293A4B /* PrivilegedPort.swift */,
 				C500B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift */,
@@ -1003,6 +1009,8 @@
 				50290E751E53EB6A00133E3D /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* HomebrewUpdateOperation.swift in Sources */,
 				C100B2C3D4E5F60718293A4B /* PackageUpdate.swift in Sources */,
+				C800B2C3D4E5F60718293A4B /* HelperProtocol.swift in Sources */,
+				C810B2C3D4E5F60718293A4B /* PrivilegedHelper.swift in Sources */,
 				C600B2C3D4E5F60718293A4B /* PortAction.swift in Sources */,
 				C610B2C3D4E5F60718293A4B /* PrivilegedPort.swift in Sources */,
 				C400B2C3D4E5F60718293A4B /* MacPortsBrowsing.swift in Sources */,
