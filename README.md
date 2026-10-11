@@ -27,14 +27,19 @@ This is a fork of [Latest](https://github.com/mangerlahn/Latest) by Max Langer, 
 - **Switch to MacPorts** replaces Homebrew formulae with their MacPorts equivalents and keeps only the MacPorts copy. Everything that depends on a selected formula moves with it, as one group. The MacPorts ports are installed first and checked, and only then are the Homebrew formulae uninstalled, dependents first, with Homebrew's autoremove turned off so nothing unlisted is removed. A group is refused if any member has no prebuilt equivalent or if it contains more than 25 packages. If the local MacPorts index is out of date, it is refreshed first (`port selfupdate`).
 - **MacPorts** (⇧⌘M) is a browser for MacPorts: search by name or description, browse by category, and list requested or all installed ports. The detail pane shows the description, license, dependencies, variants and whether a prebuilt archive exists for this Mac. You can install a prebuilt port, uninstall a port, or build one from source (behind a confirmation).
 
-MacPorts changes need administrator rights, so the app shows the standard macOS password prompt when you install, uninstall, switch or refresh the MacPorts index.
+- The Package Updates window can filter by *Ready*, *Would compile* and *MacPorts equivalent*, sorts by any column, flags MacPorts equivalents that are older or newer than what you have, and has **Update All Ready**, which updates everything that can be updated from prebuilt binaries.
+
+MacPorts changes need administrator rights. By default the app shows the standard macOS password prompt, once per action (a refresh plus install in a switch share one prompt). Only a fixed allow-list of `port` commands is ever run with those rights: `selfupdate`, `install`, `upgrade -b` and `uninstall`, with validated names and variants.
+
+**Optional: password-free MacPorts changes.** Builds signed with a developer team can embed a small privileged helper (a launch daemon registered through `SMAppService`). You approve it once in System Settings, then MacPorts changes run without a prompt. The helper accepts only the allow-list above and only connections from this app signed by the same team. Turn it on or off with the button in the Package Updates window. Build with `SIGN_IDENTITY="Apple Development: …" scripts/build-release.sh` (see the script header). Ad-hoc builds have no helper and keep the prompt.
 
 **Limits**
 
 - About a quarter of Homebrew casks use `version :latest`, which has no version number, so their apps cannot be checked for updates this way.
 - The Package Updates and MacPorts windows only know what the local `brew` and `port` report. Run *Update Package Indexes* in the Package Updates window if the lists look stale.
-- The switch was exercised end to end once (`deno` together with its dependent `yt-dlp`). The MacPorts window's install and uninstall buttons have been unit-tested for their parsing and safety checks but not run against a real port.
-- Builds are not notarized. Build locally and sign ad hoc (`codesign --force --deep -s - Latest.app`).
+- The switch was exercised end to end three times (`deno` together with its dependent `yt-dlp`, then `radare2` and `wget`). The MacPorts window's install and uninstall buttons have been unit-tested for their parsing and safety checks but not run against a real port.
+- The privileged helper builds and its allow-list is unit-tested, but its XPC path has not been exercised yet, because it needs a build signed with a developer team.
+- Builds are not notarized unless you pass `NOTARY_PROFILE` to `scripts/build-release.sh`. Without a signing identity the script signs ad hoc.
 
 **Building and testing**
 

@@ -42,3 +42,35 @@ struct PackageUpdate: Hashable {
 	var alternative: Alternative?
 	
 }
+
+/// Compares package versions as they appear in Homebrew (`1.25.0_2`) and MacPorts (`1.25.0_1+gnutls`).
+enum PackageVersions {
+	
+	enum Relation {
+		case newer, same, older
+	}
+	
+	/// The version without Homebrew revisions (`_2`), MacPorts revisions and variants (`_1+gnutls`).
+	static func base(_ version: String) -> String {
+		String(version.prefix { $0 != "_" && $0 != "+" })
+	}
+	
+	/// How `candidate` relates to `reference`, comparing numbers numerically (`10` is newer than `9`).
+	static func relation(of candidate: String, to reference: String) -> Relation {
+		switch base(candidate).compare(base(reference), options: .numeric) {
+		case .orderedDescending: return .newer
+		case .orderedAscending: return .older
+		case .orderedSame: return .same
+		}
+	}
+	
+}
+
+extension PackageUpdate.Alternative {
+	
+	/// How this equivalent's version relates to a version you have or could get.
+	func relation(to version: String) -> PackageVersions.Relation {
+		PackageVersions.relation(of: self.version, to: version)
+	}
+	
+}

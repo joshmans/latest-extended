@@ -10,7 +10,35 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	
 	static let shared = PackagesWindowController()
 	
+	/// Everything found by the last check.
+	private var allPackages = [PackageUpdate]()
+	
+	/// What the table shows: `allPackages` after filtering and sorting.
 	private var packages = [PackageUpdate]()
+	
+	private enum Filter: Int, CaseIterable {
+		case all, ready, wouldCompile, hasEquivalent
+		
+		var title: String {
+			switch self {
+			case .all: return "All"
+			case .ready: return "Ready"
+			case .wouldCompile: return "Would compile"
+			case .hasEquivalent: return "MacPorts equivalent"
+			}
+		}
+		
+		func includes(_ package: PackageUpdate) -> Bool {
+			switch self {
+			case .all: return true
+			case .ready: return package.state.isPrebuilt
+			case .wouldCompile: return !package.state.isPrebuilt
+			case .hasEquivalent: return package.alternative != nil
+			}
+		}
+	}
+	
+	private let filterControl = NSSegmentedControl(labels: Filter.allCases.map(\.title), trackingMode: .selectOne, target: nil, action: nil)
 	private let table = NSTableView()
 	private let log = NSTextView()
 	private let statusLabel = NSTextField(labelWithString: "")
@@ -18,27 +46,31 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	private lazy var refreshButton = NSButton(title: "Refresh", target: self, action: #selector(refresh))
 	private lazy var indexButton = NSButton(title: "Update Package Indexes…", target: self, action: #selector(updateIndexes))
 	private lazy var updateButton = NSButton(title: "Update Selected", target: self, action: #selector(updateSelected))
+	private lazy var updateAllButton = NSButton(title: "Update All Ready…", target: self, action: #selector(updateAllReady))
 	private lazy var privilegesButton = NSButton(title: "", target: self, action: #selector(configurePrivileges))
 	private lazy var switchButton = NSButton(title: "Switch to MacPorts…", target: self, action: #selector(switchToMacPorts))
 	private var isBusy = false { didSet { refreshControls() } }
 	
 	private enum Column: String, CaseIterable {
-		case manager = "Manager", name = "Package", installed = "Installed", available = "Available", status = "Status"
+		case manager = "Manager", name = "Package", installed = "Installed", available = "Available", status = "Status", macPorts = "MacPorts equivalent"
 		var width: CGFloat {
 			switch self {
 			case .manager: return 80
-			case .name: return 180
-			case .installed, .available: return 130
-			case .status: return 420
+			case .name: return 170
+			case .installed, .available: return 110
+			case .status: return 130
+			case .macPorts: return 300
 			}
 		}
 	}
 	
 	private init() {
-		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 640), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+		let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 740), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
 		window.title = "Package Updates"
 		window.center()
 		window.isReleasedWhenClosed = false
+		window.setFrameAutosaveName("PackageUpdatesWindow")
+		window.minSize = NSSize(width: 820, height: 480)
 		super.init(window: window)
 		buildInterface(in: window)
 	}
@@ -53,9 +85,12 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 			let tableColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(column.rawValue))
 			tableColumn.title = column.rawValue
 			tableColumn.width = column.width
+			tableColumn.sortDescriptorPrototype = NSSortDescriptor(key: column.rawValue, ascending: true)
 			table.addTableColumn(tableColumn)
 		}
 		table.allowsMultipleSelection = true
+		table.autosaveName = "PackageUpdatesTable"
+		table.autosaveTableColumns = true
 		table.usesAlternatingRowBackgroundColors = true
 		table.dataSource = self
 		table.delegate = self
@@ -75,10 +110,15 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		spinner.isDisplayedWhenStopped = false
 		statusLabel.lineBreakMode = .byTruncatingTail
 		
-		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), privilegesButton, indexButton, refreshButton, switchButton, updateButton])
+		filterControl.selectedSegment = 0
+		filterControl.target = self
+		filterControl.action = #selector(filterChanged)
+		let filterRow = NSStackView(views: [filterControl, NSView(), privilegesButton])
+		filterRow.orientation = .horizontal
+		let buttons = NSStackView(views: [spinner, statusLabel, NSView(), indexButton, refreshButton, switchButton, updateAllButton, updateButton])
 		buttons.orientation = .horizontal
 		
-		let stack = NSStackView(views: [buttons, tableScroll, logScroll])
+		let stack = NSStackView(views: [buttons, filterRow, tableScroll, logScroll])
 		stack.orientation = .vertical
 		stack.spacing = 8
 		stack.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
@@ -90,8 +130,9 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 			stack.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
 			stack.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
 			stack.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor),
-			logScroll.heightAnchor.constraint(equalToConstant: 140),
+			logScroll.heightAnchor.constraint(equalToConstant: 96),
 			buttons.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
+			filterRow.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
 			tableScroll.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24),
 			logScroll.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24)
 		])
@@ -158,6 +199,8 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		refreshButton.isEnabled = !isBusy
 		indexButton.isEnabled = !isBusy
 		updateButton.isEnabled = !isBusy && !selectedUpdatablePackages.isEmpty
+		updateAllButton.isEnabled = !isBusy && allPackages.contains { $0.state.isPrebuilt }
+		filterControl.isEnabled = !isBusy
 		switchButton.isEnabled = !isBusy && !selectedSwitchablePackages.isEmpty && MacPortsPackageChecker.isInstalled
 		isBusy ? spinner.startAnimation(nil) : spinner.stopAnimation(nil)
 	}
@@ -195,16 +238,14 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 			alternatives.forEach { brew[$0.key].alternative = $0.value }
 			
 			let ports = MacPortsPackageChecker.check()
-			let all = (ports.updates + brew).sorted { lhs, rhs in
-				(lhs.state.isPrebuilt ? 0 : 1, lhs.manager.rawValue, lhs.name) < (rhs.state.isPrebuilt ? 0 : 1, rhs.manager.rawValue, rhs.name)
-			}
+			let all = ports.updates + brew
 			
 			DispatchQueue.main.async {
-				self.packages = all
-				self.table.reloadData()
+				self.allPackages = all
+				self.applyFilterAndSort()
 				let ready = all.filter { $0.state.isPrebuilt }.count
-				var summary = "\(all.count) outdated · \(ready) can be updated without compiling · \(all.count - ready) would compile"
-				if ports.indexIsStale { summary += " · MacPorts index is old (see Update Package Indexes)" }
+				var summary = "\(all.count) outdated · \(ready) ready · \(all.count - ready) would compile"
+				if ports.indexIsStale { summary += " · MacPorts index is old (Update Package Indexes)" }
 				self.statusLabel.stringValue = summary
 				self.isBusy = false
 			}
@@ -260,6 +301,9 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 			let planned = Set(plan.groups.flatMap { $0.ports.values })
 			let outdatedIndex = MacPortsPackageChecker.portsWithOutdatedIndex(archiveVersions.filter { planned.contains($0.key) })
 			
+			let alternativeVersions = known.compactMapValues { $0?.version }
+			let installedVersions = Dictionary(uniqueKeysWithValues: selected.map { ($0.name, $0.installedVersion) })
+			
 			DispatchQueue.main.async {
 				let blocked = plan.blocked.map { "• \($0.package) stays in Homebrew: \($0.reason)" }
 				guard !plan.groups.isEmpty else {
@@ -273,7 +317,16 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				alert.messageText = "Switch \(plan.groups.reduce(0) { $0 + $1.formulae.count }) package(s) to MacPorts?"
 				var text = "Every prebuilt MacPorts port is installed first. Homebrew formulae are only uninstalled after all ports of their group are confirmed installed, dependents first.\n"
 				for group in plan.groups {
-					text += "\n" + group.formulae.map { "• \($0) → port \(group.ports[$0] ?? "?")" + (group.pulledIn.contains($0) ? "  (depends on your selection)" : "") }.joined(separator: "\n") + "\n"
+					text += "\n" + group.formulae.map { formula -> String in
+						var line = "• \(formula) → port \(group.ports[formula] ?? "?")"
+						if let version = alternativeVersions[formula] {
+							line += " \(PackageVersions.base(version))"
+							if let installed = installedVersions[formula], PackageVersions.relation(of: version, to: installed) == .older {
+								line += " (older than your \(PackageVersions.base(installed)))"
+							}
+						}
+						return line + (group.pulledIn.contains(formula) ? "  (depends on your selection)" : "")
+					}.joined(separator: "\n") + "\n"
 				}
 				if !blocked.isEmpty { text += "\nKept in Homebrew:\n" + blocked.joined(separator: "\n") + "\n" }
 				if !outdatedIndex.isEmpty {
@@ -335,7 +388,26 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 	}
 	
 	@objc private func updateSelected() {
-		let selected = selectedUpdatablePackages
+		performUpdate(selectedUpdatablePackages)
+	}
+	
+	/// Updates every package that can be updated without compiling, after confirmation.
+	@objc private func updateAllReady() {
+		let ready = allPackages.filter { $0.state.isPrebuilt }
+		guard !ready.isEmpty else { return }
+		let brew = ready.filter { $0.manager == .homebrew }.count
+		let ports = ready.count - brew
+		
+		let alert = NSAlert()
+		alert.messageText = "Update \(ready.count) package(s) from prebuilt binaries?"
+		alert.informativeText = "\(brew) Homebrew formula(e) and \(ports) MacPorts port(s). Nothing is compiled: Homebrew uses prebuilt bottles only and MacPorts uses prebuilt archives only. MacPorts asks for your administrator password unless the helper is enabled.\n\n" + ready.map { "• \($0.name) \($0.installedVersion) → \($0.availableVersion)" }.prefix(30).joined(separator: "\n") + (ready.count > 30 ? "\n…" : "")
+		alert.addButton(withTitle: "Update")
+		alert.addButton(withTitle: "Cancel")
+		guard alert.runModal() == .alertFirstButtonReturn else { return }
+		performUpdate(ready)
+	}
+	
+	private func performUpdate(_ selected: [PackageUpdate]) {
 		guard !selected.isEmpty else { return }
 		isBusy = true
 		statusLabel.stringValue = "Updating \(selected.count) package(s)…"
@@ -371,6 +443,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		let package = packages[row]
 		
 		let text: String
+		var tooltip: String?
 		switch column {
 		case .manager: text = package.manager.rawValue
 		case .name: text = package.name
@@ -379,21 +452,79 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		case .status:
 			switch package.state {
 			case .prebuilt:
-				text = "Ready: prebuilt binary available"
+				text = "✓ Ready"
+				tooltip = "A prebuilt binary is available, so updating does not compile anything."
 			case .wouldCompile(let reason):
-				if let alternative = package.alternative {
-					text = "Would compile (\(reason)). Prebuilt in \(alternative.manager.rawValue): \(alternative.name) \(alternative.version)"
-				} else {
-					text = "Would compile (\(reason))"
+				text = "⚠︎ Would compile"
+				tooltip = reason
+			}
+		case .macPorts:
+			if let alternative = package.alternative {
+				var note = ""
+				switch alternative.relation(to: package.installedVersion) {
+				case .older: note = "  · older than yours"
+				case .same: note = "  · same version"
+				case .newer: note = "  · newer than yours"
 				}
+				text = "\(alternative.name) \(alternative.version)\(note)"
+				tooltip = "Prebuilt MacPorts equivalent. Installed: \(package.installedVersion), Homebrew has \(package.availableVersion)."
+			} else {
+				text = package.manager == .homebrew && !package.state.isPrebuilt ? "none found" : ""
 			}
 		}
 		
 		let label = NSTextField(labelWithString: text)
 		label.lineBreakMode = .byTruncatingTail
-		label.toolTip = text
-		label.textColor = package.state.isPrebuilt ? .labelColor : .secondaryLabelColor
+		label.toolTip = tooltip ?? text
+		label.textColor = package.state.isPrebuilt || column == .macPorts && package.alternative != nil ? .labelColor : .secondaryLabelColor
 		return label
+	}
+	
+	
+	// MARK: - Filtering and Sorting
+	
+	@objc private func filterChanged() {
+		applyFilterAndSort()
+	}
+	
+	func tableView(_ tableView: NSTableView, sortDescriptorsDidChange oldDescriptors: [NSSortDescriptor]) {
+		applyFilterAndSort()
+	}
+	
+	/// Rebuilds `packages` from `allPackages` for the chosen filter and sort order, keeping the selection where possible.
+	private func applyFilterAndSort() {
+		let selectedNames = Set(table.selectedRowIndexes.compactMap { $0 < packages.count ? "\(packages[$0].manager.rawValue)/\(packages[$0].name)" : nil })
+		let filter = Filter(rawValue: filterControl.selectedSegment) ?? .all
+		
+		for item in Filter.allCases {
+			let count = allPackages.filter(item.includes).count
+			filterControl.setLabel("\(item.title) (\(count))", forSegment: item.rawValue)
+		}
+		
+		var result = allPackages.filter(filter.includes)
+		if let descriptor = table.sortDescriptors.first, let key = descriptor.key, let column = Column(rawValue: key) {
+			func value(_ package: PackageUpdate) -> String {
+				switch column {
+				case .manager: return package.manager.rawValue
+				case .name: return package.name
+				case .installed: return package.installedVersion
+				case .available: return package.availableVersion
+				case .status: return package.state.isPrebuilt ? "0" : "1"
+				case .macPorts: return package.alternative?.name ?? "~"
+				}
+			}
+			result.sort { lhs, rhs in
+				let order = value(lhs).compare(value(rhs), options: [.numeric, .caseInsensitive])
+				return descriptor.ascending ? order == .orderedAscending : order == .orderedDescending
+			}
+		} else {
+			result.sort { ($0.state.isPrebuilt ? 0 : 1, $0.manager.rawValue, $0.name) < ($1.state.isPrebuilt ? 0 : 1, $1.manager.rawValue, $1.name) }
+		}
+		
+		packages = result
+		table.reloadData()
+		table.selectRowIndexes(IndexSet(packages.indices.filter { selectedNames.contains("\(packages[$0].manager.rawValue)/\(packages[$0].name)") }), byExtendingSelection: false)
+		refreshControls()
 	}
 	
 	func tableViewSelectionDidChange(_ notification: Notification) {

@@ -269,4 +269,15 @@ final class PackageUpdateTest: XCTestCase {
 	func testRunnerFallsBackToPromptWithoutHelper() {
 		XCTAssertTrue(PortPrivileges.runner is PromptingPortRunner)
 	}
+	
+	// MARK: Version relations
+	
+	func testComparesPackageVersions() {
+		XCTAssertEqual(PackageVersions.relation(of: "3.31.12_0", to: "4.4.4"), .older)
+		XCTAssertEqual(PackageVersions.relation(of: "6.2.4_0+openssl", to: "6.2.2"), .newer)
+		XCTAssertEqual(PackageVersions.relation(of: "1.25.0_1+gnutls", to: "1.25.0_2"), .same)
+		XCTAssertEqual(PackageVersions.relation(of: "1.10.0", to: "1.9.0"), .newer, "Numbers compare numerically")
+		XCTAssertEqual(PackageVersions.relation(of: "2026.08.19_0+ffmpeg", to: "2026.8.19"), .same)
+		XCTAssertEqual(PackageVersions.base("1.25.0_1+gnutls"), "1.25.0")
+	}
 }
