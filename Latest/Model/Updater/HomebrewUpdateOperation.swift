@@ -45,26 +45,38 @@ enum UpdateLog {
 /// Brew runs without a terminal, so installers that need `sudo` would otherwise fail with "a terminal is required". Brew adds `sudo -A` when `SUDO_ASKPASS` is set, which calls this script. The password goes from the dialog straight to sudo; it is never stored or logged.
 enum AskpassHelper {
 	
-	private static let script = """
-	#!/bin/bash
-	# Written by Latest. Shows a password dialog for sudo -A.
-	exec /usr/bin/osascript <<'APPLESCRIPT'
-	set reason to system attribute "LATEST_ASKPASS_REASON"
-	try
-		set answer to display dialog reason default answer "" with hidden answer with title "Latest" with icon caution buttons {"Cancel", "OK"} default button "OK"
-		return text returned of answer
-	on error
-		error number -128
-	end try
-	APPLESCRIPT
+	private static var directory: URL {
+		FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Latest", isDirectory: true)
+	}
 	
-	"""
+	/// Holds the text for the dialog. `sudo` hides the environment from the script, so the reason travels through this file. Updates run one at a time, so there is only ever one current reason.
+	private static var reasonURL: URL { directory.appendingPathComponent("askpass-reason.txt") }
+	
+	private static var scriptContents: String {
+		let reasonPath = reasonURL.path.replacingOccurrences(of: "'", with: "'\\''")
+		return """
+		#!/bin/bash
+		# Written by Latest. Shows a password dialog for sudo -A.
+		REASON=$(/bin/cat '\(reasonPath)' 2>/dev/null)
+		exec /usr/bin/osascript - "${REASON:-Homebrew needs your administrator password.}" <<'APPLESCRIPT'
+		on run argv
+			try
+				set answer to display dialog (item 1 of argv) default answer "" with hidden answer with title "Latest" with icon caution buttons {"Cancel", "OK"} default button "OK" giving up after 300
+				if gave up of answer then error number -128
+				return text returned of answer
+			on error
+				error number -128
+			end try
+		end run
+		APPLESCRIPT
+		
+		"""
+	}
 	
 	/// The script's location, written on first use.
-	static var url: URL? {
-		let directory = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Latest", isDirectory: true)
+	private static var scriptURL: URL? {
 		let url = directory.appendingPathComponent("askpass.sh")
-		let contents = script.split(separator: "\n", omittingEmptySubsequences: false).map { $0.hasPrefix("\t") ? String($0.dropFirst()) : String($0) }.joined(separator: "\n")
+		let contents = scriptContents
 		
 		if (try? String(contentsOf: url, encoding: .utf8)) != contents {
 			do {
@@ -78,10 +90,11 @@ enum AskpassHelper {
 		return url
 	}
 	
-	/// Environment that makes `sudo` use the dialog. Empty if the script could not be written.
+	/// Environment that makes `sudo` use the dialog. Empty if the script could not be written. `reason` is shown in the dialog.
 	static func environment(reason: String) -> [String: String] {
-		guard let url else { return [:] }
-		return ["SUDO_ASKPASS": url.path, "LATEST_ASKPASS_REASON": reason]
+		guard let url = scriptURL else { return [:] }
+		try? reason.write(to: reasonURL, atomically: true, encoding: .utf8)
+		return ["SUDO_ASKPASS": url.path]
 	}
 	
 }
@@ -191,7 +204,7 @@ class HomebrewUpdateOperation: UpdateOperation, @unchecked Sendable {
 		environment["HOMEBREW_NO_AUTO_UPDATE"] = "1"
 		environment["HOMEBREW_NO_INSTALL_CLEANUP"] = "1"
 		environment["NONINTERACTIVE"] = "1"
-		environment.merge(AskpassHelper.environment(reason: "Homebrew needs your administrator password to update \(caskToken).")) { $1 }
+		environment.merge(AskpassHelper.environment(reason: "Updating \(caskToken) needs your administrator password.\n\nLatest passes it straight to the installer and does not store it.")) { $1 }
 		process.environment = environment
 		
 		let pipe = Pipe()
