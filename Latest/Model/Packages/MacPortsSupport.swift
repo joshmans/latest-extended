@@ -139,27 +139,32 @@ enum MacPortsPackageChecker {
 	
 	/// Upgrades the given ports using prebuilt archives only (`-b` fails instead of compiling).
 	static func upgrade(_ names: [String]) -> CommandRunner.Result {
-		let valid = names.filter(MacPortsParser.isValidPortName)
-		guard !valid.isEmpty else { return .init(status: -1, output: "No valid port names given.") }
-		return CommandRunner.runAsAdministrator(portPath, ["-N", "-b", "upgrade"] + valid)
+		run(.upgrade(ports: names))
 	}
 	
 	/// Installs ports. By default only prebuilt archives are used (`-b`); `buildFromSource` allows compiling.
 	static func install(_ names: [String], variants: String = "", buildFromSource: Bool = false) -> CommandRunner.Result {
-		let valid = names.filter(MacPortsParser.isValidPortName)
-		guard !valid.isEmpty, valid.count == names.count, MacPortsParser.isValidVariantSelection(variants) else {
-			return .init(status: -1, output: "Invalid port name or variants.")
-		}
-		let variantArguments = variants.split(separator: " ").map(String.init)
-		// -p continues with the remaining ports if one fails.
-		var arguments = ["-N", "-p"] + (buildFromSource ? [] : ["-b"]) + ["install"]
-		for name in valid { arguments.append(name); if valid.count == 1 { arguments += variantArguments } }
-		return CommandRunner.runAsAdministrator(portPath, arguments)
+		guard MacPortsParser.isValidVariantSelection(variants) else { return .init(status: -1, output: "Invalid variants.") }
+		return run(.install(ports: names, variants: variants.split(separator: " ").map(String.init), binaryOnly: !buildFromSource))
 	}
 	
 	static func uninstall(_ name: String) -> CommandRunner.Result {
-		guard MacPortsParser.isValidPortName(name) else { return .init(status: -1, output: "Invalid port name.") }
-		return CommandRunner.runAsAdministrator(portPath, ["-N", "uninstall", name])
+		run(.uninstall(port: name))
+	}
+	
+	/// Refreshes the port index.
+	static func selfUpdate() -> CommandRunner.Result {
+		run(.selfUpdate)
+	}
+	
+	/// Runs one privileged action.
+	static func run(_ action: PortAction) -> CommandRunner.Result {
+		runBatch([action]).first ?? .init(status: -1, output: "Nothing was run.")
+	}
+	
+	/// Runs several privileged actions with a single administrator prompt.
+	static func runBatch(_ actions: [PortAction]) -> [CommandRunner.Result] {
+		PortPrivileges.runner.run(actions)
 	}
 	
 	/// The ports whose local index version differs from the prebuilt archive on the server. Installing those with `-b` would fail until the index is refreshed.
@@ -176,10 +181,6 @@ enum MacPortsPackageChecker {
 		MacPortsParser.parseInstalled(CommandRunner.run(portPath, ["installed", name]).output).contains { $0.name == name && $0.isActive }
 	}
 	
-	/// Refreshes the port index.
-	static func selfUpdate() -> CommandRunner.Result {
-		CommandRunner.runAsAdministrator(portPath, ["-N", "selfupdate"])
-	}
 	
 }
 

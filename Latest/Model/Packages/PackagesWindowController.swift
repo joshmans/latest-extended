@@ -237,12 +237,15 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				DispatchQueue.global().async {
 					let ports = Array(Set(plan.groups.flatMap { $0.ports.values })).sorted()
 					var outputs = [String]()
-					if !outdatedIndex.isEmpty {
-						let update = MacPortsPackageChecker.selfUpdate()
-						outputs.append("port selfupdate: exit \(update.status)\n" + update.output.suffix(800))
+					// Refreshing a stale index and installing share one administrator prompt.
+					var actions = [PortAction]()
+					if !outdatedIndex.isEmpty { actions.append(.selfUpdate) }
+					actions.append(.install(ports: ports, variants: [], binaryOnly: true))
+					let results = MacPortsPackageChecker.runBatch(actions)
+					for (action, result) in zip(actions, results) {
+						let title = (["port"] + (action.arguments ?? [])).joined(separator: " ")
+						outputs.append("\(title): exit \(result.status)\n" + result.output.suffix(1500))
 					}
-					let install = MacPortsPackageChecker.install(ports)
-					outputs.append("port -b install \(ports.joined(separator: " ")): exit \(install.status)\n" + install.output.suffix(1500))
 					
 					for group in plan.groups {
 						let missing = group.ports.values.filter { !MacPortsPackageChecker.isActive($0) }

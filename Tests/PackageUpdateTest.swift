@@ -210,4 +210,45 @@ final class PackageUpdateTest: XCTestCase {
 		XCTAssertEqual(reverse["aom"], ["ffmpeg"])
 		XCTAssertEqual(reverse["deno"], ["yt-dlp"])
 	}
+	
+	// MARK: Privileged actions
+	
+	func testActionsProduceExactlyTheAllowedArguments() {
+		XCTAssertEqual(PortAction.selfUpdate.arguments, ["-N", "selfupdate"])
+		XCTAssertEqual(PortAction.install(ports: ["wget"], variants: ["+ssl"], binaryOnly: true).arguments, ["-N", "-p", "-b", "install", "wget", "+ssl"])
+		XCTAssertEqual(PortAction.install(ports: ["a", "b"], variants: [], binaryOnly: false).arguments, ["-N", "-p", "install", "a", "b"])
+		XCTAssertEqual(PortAction.upgrade(ports: ["a"]).arguments, ["-N", "-b", "upgrade", "a"])
+		XCTAssertEqual(PortAction.uninstall(port: "a").arguments, ["-N", "uninstall", "a"])
+	}
+	
+	func testActionsRoundTripThroughArguments() {
+		let actions: [PortAction] = [.selfUpdate, .install(ports: ["wget"], variants: ["+ssl", "-x11"], binaryOnly: true), .install(ports: ["a", "b"], variants: [], binaryOnly: false), .upgrade(ports: ["a", "b"]), .uninstall(port: "py313-tkinter")]
+		for action in actions { XCTAssertEqual(PortAction(arguments: action.arguments!), action) }
+	}
+	
+	func testRejectsEverythingOutsideTheAllowList() {
+		let rejected: [[String]] = [
+			[], ["selfupdate"], ["-N"], ["-N", "sync"], ["-N", "clean", "--all", "foo"], ["-N", "-b", "upgrade"],
+			["-N", "install", "foo"], ["-N", "-p", "-b", "install"], ["-N", "-p", "-b", "install", "foo; reboot"],
+			["-N", "-p", "-b", "install", "-f", "foo"], ["-N", "uninstall", "a", "b"], ["-N", "uninstall", "--follow-dependents", "a"],
+			["-N", "-p", "install", "file:///tmp/evil"], ["-N", "-p", "install", "../evil"], ["-N", "-p", "-b", "install", "a", "b", "+x11"],
+			["-N", "-D", "/tmp", "selfupdate"], ["-v", "-N", "selfupdate"]
+		]
+		for arguments in rejected { XCTAssertNil(PortAction(arguments: arguments), "\(arguments) must be rejected") }
+		XCTAssertNil(PortAction.install(ports: [], variants: [], binaryOnly: true).arguments)
+		XCTAssertNil(PortAction.install(ports: Array(repeating: "a", count: 201), variants: [], binaryOnly: true).arguments)
+	}
+	
+	func testSplitsBatchedOutputIntoPerStepResults() {
+		let output = "Selfupdate ok\n@@LATEST-EXIT:0\nInstalling\nfailed\n@@LATEST-EXIT:1\n"
+		let results = PromptingPortRunner.splitResults(output, expected: 2, fallbackStatus: 0)
+		XCTAssertEqual(results.map(\.status), [0, 1])
+		XCTAssertEqual(results[1].output, "Installing\nfailed")
+	}
+	
+	func testCancelledPromptMarksAllStepsAsNotRun() {
+		let results = PromptingPortRunner.splitResults("execution error: User canceled. (-128)", expected: 2, fallbackStatus: 1)
+		XCTAssertEqual(results.count, 2)
+		XCTAssertTrue(results.allSatisfy { $0.status != 0 })
+	}
 }
