@@ -103,7 +103,7 @@ Proven on real packages:
 
 Not yet proven:
 
-- **The helper's XPC path.** It compiles (universal) and the allow-list is tested, but it needs a team-signed build, and no signing identity existed on the test machine. First task for whoever has the certificate: run `SIGN_IDENTITY="Apple Development: …" scripts/build-release.sh`, install the result, press "Enable password-free…" in the Package Updates window, approve it in System Settings, and run one install.
+- *(Resolved)* **The helper's XPC path** was verified on 2026-10-10 with a Developer ID Application build (team `89DLSNZTCX`): the helper registered through `SMAppService`, was approved once in System Settings → General → Login Items & Extensions, and then `port -N -b upgrade graphite2` ran as root with no password prompt. Two findings to carry over: (1) `SMAppService.status` returns `.notFound` for a valid daemon that has never been registered, so do not treat it as "unavailable"; (2) `register()` throws "Operation not permitted" when the user still has to approve it, even though registration succeeded; check `status == .requiresApproval` instead of reporting an error. The Apple Development and Apple Distribution certificates were present but not valid for signing on that machine; Developer ID worked.
 - The MacPorts window's **install, uninstall and build-from-source buttons** were never pressed against a real port (only the identical code path through the switch was).
 - **Variant selection UI** does not exist beyond a text field.
 - Notarization is scripted but untested.
@@ -175,7 +175,7 @@ Treat as leads, not facts. Search results were thin and some came from aggregato
 ## 9. Distribution checklist
 
 - Apple Developer account: available to the project owner.
-- Signing identity: none was installed on the test machine. Create one in Xcode → Settings → Accounts → Manage Certificates (**Apple Development** is enough for local use and for `SMAppService`; **Developer ID Application** for distribution).
+- Signing identity: create one in Xcode → Settings → Accounts → Manage Certificates. **Developer ID Application** is what worked for the helper test (`SIGN_IDENTITY="Developer ID Application: Name (TEAMID)" scripts/build-release.sh`).
 - Notarization: `xcrun notarytool store-credentials <profile>` once, then `NOTARY_PROFILE=<profile> scripts/build-release.sh`.
 - Hardened runtime on, sandbox **off** (the app runs `port` and talks to a root helper).
 - Sparkle or another updater for the new app's own updates; remember that in this fork the upstream Sparkle feed was removed on purpose.
@@ -185,7 +185,7 @@ Treat as leads, not facts. Search results were thin and some came from aggregato
 ## 10. Suggested first steps for the new session
 
 1. Create the repository and a `MacPortsKit` Swift package; move the Foundation-only files and their tests; get `swift test` green.
-2. Get a certificate, run the signed build, and verify the helper end to end (section 5). Fix whatever the first real XPC run reveals.
+2. Re-create the helper as a proper Xcode target with the same design (section 6); the first real XPC run is already proven with the scripted build.
 3. Build the **Outdated** and **Installed** screens in SwiftUI on `MacPortsKit`.
 4. Add Browse/Install with the variant picker and live log streaming.
 5. Decide whether Latest depends on `MacPortsKit` (preferred) or keeps its copy; remove duplication either way.

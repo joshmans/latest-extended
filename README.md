@@ -38,7 +38,7 @@ MacPorts changes need administrator rights. By default the app shows the standar
 - About a quarter of Homebrew casks use `version :latest`, which has no version number, so their apps cannot be checked for updates this way.
 - The Package Updates and MacPorts windows only know what the local `brew` and `port` report. Run *Update Package Indexes* in the Package Updates window if the lists look stale.
 - The switch was exercised end to end three times (`deno` together with its dependent `yt-dlp`, then `radare2` and `wget`). The MacPorts window's install and uninstall buttons have been unit-tested for their parsing and safety checks but not run against a real port.
-- The privileged helper builds and its allow-list is unit-tested, but its XPC path has not been exercised yet, because it needs a build signed with a developer team.
+- The privileged helper has been verified end to end with a Developer ID build: after approving it once in System Settings, a MacPorts upgrade ran as root with no password prompt. Its allow-list is also unit-tested.
 - Builds are not notarized unless you pass `NOTARY_PROFILE` to `scripts/build-release.sh`. Without a signing identity the script signs ad hoc.
 
 **Building and testing**
