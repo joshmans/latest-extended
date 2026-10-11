@@ -108,7 +108,13 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		spinner.style = .spinning
 		spinner.controlSize = .small
 		spinner.isDisplayedWhenStopped = false
+		// The summary may be long. It truncates instead of forcing the window wider, so the buttons always stay visible.
 		statusLabel.lineBreakMode = .byTruncatingTail
+		statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		for button in [indexButton, refreshButton, switchButton, updateAllButton, updateButton, privilegesButton] {
+			button.setContentCompressionResistancePriority(.required, for: .horizontal)
+		}
 		
 		filterControl.selectedSegment = 0
 		filterControl.target = self
@@ -247,6 +253,7 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 				var summary = "\(all.count) outdated · \(ready) ready · \(all.count - ready) would compile"
 				if ports.indexIsStale { summary += " · MacPorts index is old (Update Package Indexes)" }
 				self.statusLabel.stringValue = summary
+				self.statusLabel.toolTip = summary
 				self.isBusy = false
 			}
 		}
@@ -433,7 +440,8 @@ final class PackagesWindowController: NSWindowController, NSTableViewDataSource,
 		
 		let alert = NSAlert()
 		alert.messageText = "Update \(ready.count) package(s) from prebuilt binaries?"
-		alert.informativeText = "\(brew) Homebrew formula(e) and \(ports) MacPorts port(s). Nothing is compiled: Homebrew uses prebuilt bottles only and MacPorts uses prebuilt archives only. MacPorts asks for your administrator password unless the helper is enabled.\n\n" + ready.map { "• \($0.name) \($0.installedVersion) → \($0.availableVersion)" }.prefix(30).joined(separator: "\n") + (ready.count > 30 ? "\n…" : "")
+		alert.informativeText = "\(brew) Homebrew formula(e) and \(ports) MacPorts port(s). Nothing is compiled: Homebrew uses prebuilt bottles only and MacPorts uses prebuilt archives only. MacPorts asks for your administrator password unless the helper is enabled."
+		alert.accessoryView = Self.scrollableText(ready.map { "• \($0.manager.rawValue) \($0.name) \($0.installedVersion) → \($0.availableVersion)" }.joined(separator: "\n"))
 		alert.addButton(withTitle: "Update")
 		alert.addButton(withTitle: "Cancel")
 		guard alert.runModal() == .alertFirstButtonReturn else { return }

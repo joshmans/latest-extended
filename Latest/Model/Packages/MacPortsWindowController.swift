@@ -41,6 +41,8 @@ final class MacPortsWindowController: NSWindowController, NSTableViewDataSource,
 		window.title = "MacPorts"
 		window.center()
 		window.isReleasedWhenClosed = false
+		window.setFrameAutosaveName("MacPortsWindow")
+		window.minSize = NSSize(width: 860, height: 560)
 		super.init(window: window)
 		buildInterface(in: window)
 	}
@@ -62,6 +64,11 @@ final class MacPortsWindowController: NSWindowController, NSTableViewDataSource,
 		searchField.sendsSearchStringImmediately = false
 		searchField.target = self
 		searchField.action = #selector(runQuery)
+		// A long status must truncate instead of widening the window and pushing the buttons out of view.
+		statusLabel.lineBreakMode = .byTruncatingTail
+		statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+		statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+		for button in [installButton, sourceButton, uninstallButton] { button.setContentCompressionResistancePriority(.required, for: .horizontal) }
 		spinner.style = .spinning
 		spinner.controlSize = .small
 		spinner.isDisplayedWhenStopped = false

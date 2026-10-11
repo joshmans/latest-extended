@@ -1,6 +1,6 @@
 # Upstream pull requests (drafts)
 
-Three small, independent changes prepared against [mangerlahn/Latest](https://github.com/mangerlahn/Latest) `main` (1301cf6). Nothing has been posted upstream. Each branch is based directly on upstream's `main`, builds on its own, and merges with the other two without conflicts.
+Three small, independent changes prepared against [mangerlahn/Latest](https://github.com/mangerlahn/Latest) `main` (1301cf6). The fork `joshmans/Latest` exists with these three branches, and a comment offering each of the two feature changes was posted on issues #288 and #297 (2026-10-10). No pull request has been opened yet. Each branch is based directly on upstream's `main`, builds on its own, and merges with the other two without conflicts.
 
 | Branch | Upstream issue | Tests added |
 |---|---|---|
@@ -17,7 +17,7 @@ The changes were written with Claude's help; say so in the PRs.
 Pull requests need a fork in the same GitHub network, and `joshmans/latest-extended` is a standalone repository. So:
 
 ```bash
-gh repo fork mangerlahn/Latest --clone=false --remote=false
+gh repo fork mangerlahn/Latest --clone=false
 git remote add forkpr https://github.com/<you>/Latest.git
 git push forkpr pr/fix-appdatastore-unowned-crash pr/homebrew-cask-bundle-id-matching pr/homebrew-in-app-update
 ```

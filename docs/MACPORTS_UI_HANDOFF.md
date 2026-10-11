@@ -146,6 +146,8 @@ MacPortsHelper/           Privileged helper tool target (proper Xcode target + C
 5. **Activity**: queue plus live log. The current helper returns output only at the end; stream it (an XPC callback object) for long builds.
 6. **Homebrew migration** (optional): the existing `PackageSwitch` planner and `HomebrewPackageChecker`.
 
+**Switching many packages:** judge each package's chain of dependents separately (one blocked package must not block the others), merge overlapping chains that can all move, cap groups at 150, look equivalents up in parallel, split installs into chunks of 100 inside one admin prompt, and read installed ports with a single `port installed`. In practice the real blockers are dependents without a prebuilt MacPorts equivalent (on the test machine `qt`, `ffmpeg-full`, `gnupg`, `onnx`), not group size. Long lists in alerts must be scrollable, or the buttons end up off-screen.
+
 **Design rules carried over:**
 
 - Prebuilt by default (`-b`); compiling is always an explicit, confirmed choice.
